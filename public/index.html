@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hotel California Jianpu</title>
+    <base href="./" />
+    <style>
+      #testinfo table td{
+        padding: 2px 5px;
+      }
+    </style>
+</head>
+
+<body>
+
+  <canvas id="sheet" style="border: 1px solid #333;"></canvas>
+  <div id="opearte">
+    <button type="button" id="render">render</button>
+
+    <span style="margin-left: 30px;" id="step-index"></span>
+    <button type="button" id="step-render">step</button>
+
+    <button type="button" style="margin-left: 30px;" id="clear">clear</button>
+    <button type="button" style="margin-left: 30px;" id="reload">reload</button>
+  </div>
+  <div id="testinfo" style="border: 1px solid #f33; max-height: 500px; overflow-y: auto;"></div>
+  <script src="./dist/test.js"></script>
+</body>
+
+</html>

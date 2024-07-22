@@ -1,4 +1,5 @@
-import { Jianpu, Mode, Beat, Bpm, Notation, NotationType, Note, Pitch, Rest, Tuplet, Options } from './declares'
+import type { Sheet, Mode, Beat, Bpm, Notation, Note, Pitch, Rest, Tuplet, Options, Info  } from './declare'
+import { NotationType, ModeText } from './declare'
 
 type RenderType = 'text' | 'beat' | 'line' | 'dot' | 'curve' | 'arc' | 'clear'
 interface RenderItem {
@@ -8,9 +9,10 @@ interface RenderItem {
   notation?: number
 }
 interface TextItem extends RenderItem {
-  type: 'text',
-  text: string,
+  type: 'text'
+  text: string
   size: number
+  align: 'center' | 'left' | 'right'
 }
 interface BeatItem extends RenderItem {
   type: 'beat'
@@ -48,11 +50,21 @@ interface ClearItem extends RenderItem {
   height: number
 }
 
+export interface RenderNotation<T = Notation> {
+  notation: T
+  renderItems: RenderItem[]
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+export interface RenderSheet extends Omit<Sheet, 'notations'> {
+  notations: RenderNotation[]
+}
 export interface RenderResult {
   width: number
   height: number
   items: RenderItem[]
-  notations: RenderedNotation[]
 }
 
 interface RenderContext {
@@ -79,40 +91,67 @@ interface RenderState {
   bpmIndex: number
   beatIndex: number
   items: RenderItem[]
-  notations: RenderedNotation[]
 }
 interface SectionState {
   pitches: Pitch[]
   underlines: LineItem[]
 }
-export interface RenderedNotation {
-  notation: Notation
-  notationIndex: number
-  renderItems: RenderItem[]
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+
+export const preRenderNotation = (notation: Notation)  => {
+  const renderNotation: RenderNotation = {
+    notation,
+    renderItems: [],
+    x1: 0,
+    y1: 0,
+    x2: 0,
+    y2: 0
+  }
+  return renderNotation
+}
+export const preRenderSheet = (sheet: Sheet) => {
+  const renderSheet: RenderSheet = {
+    notations: sheet.notations.map(preRenderNotation),
+    info: {
+      title: sheet.info.title.trim(),
+      subTitle: sheet.info.subTitle.trim(),
+      artist: sheet.info.artist.trim(),
+      copyright: sheet.info.copyright.trim(),
+    },
+    modes: sheet.modes.sort((a,b) => a.notation - b.notation),
+    beats: sheet.beats.sort((a,b) => a.notation - b.notation),
+    bpms: sheet.bpms.sort((a,b) => a.notation - b.notation),
+    repeats: sheet.repeats
+  }
+  return renderSheet
 }
 
-export const render = (sheet: Jianpu, options: Options): RenderResult => {
-  const modes = sheet.modes.sort((a,b) => a.notation - b.notation)
-  const bpms = sheet.bpms.sort((a,b) => a.notation - b.notation)
-  const beats = sheet.beats.sort((a,b) => a.notation - b.notation)
+const checkSheet = (sheet: RenderSheet)  => {
+  const result: { success: boolean, messages: string[] } = { success: true, messages: [] }
+  if (sheet.modes.length === 0 || sheet.modes[0].notation !== 0) {
+    result.success = false
+    result.messages.push('调号信息不存在，或首个调号不在谱的开头处')
+  }
+  if (sheet.beats.length === 0 || sheet.beats[0].notation !== 0) {
+    result.success = false
+    result.messages.push('拍号信息不存在，或首个拍号不在谱的开头处')
+  }
 
+  return result
+}
+export const render = (sheet: RenderSheet, options: Options): RenderResult => {
   const context: RenderContext = {
     width: options.width,
-    usableWidth: options.width - options.padding[1] * 2,
-    paddingX: options.padding[1],
-    paddingY: options.padding[0],
+    usableWidth: options.width - options.paddingX * 2,
+    paddingX: options.paddingX,
+    paddingY: options.paddingY,
     fontSize: options.fontsize,
     lineHeight: options.fontsize * 1.5,
     notationMargin: options.fontsize * 0.25,
     linePadding: options.linePadding,
     lineWidth: Math.ceil(options.fontsize * 0.05),
     dotSize: Math.ceil(options.fontsize * 0.08),
-    sectionTime: (1024 / beats[0].denominator) * beats[0].numerator,  // 一个全音符时值为1024
-    beatTime: 1024 / beats[0].denominator
+    sectionTime: (1024 / sheet.beats[0].denominator) * sheet.beats[0].numerator,
+    beatTime: 1024 / sheet.beats[0].denominator
   }
   const state: RenderState = {
     x: context.paddingX,
@@ -122,9 +161,38 @@ export const render = (sheet: Jianpu, options: Options): RenderResult => {
     modeIndex: 0,
     bpmIndex: 0,
     beatIndex: 0,
-    items: [],
-    notations: []
+    items: []
   }
+
+  renderInfo(sheet.info, context, state)
+  renderSheet(sheet, context, state)
+
+  return { width: context.width, height: state.y + context.paddingY, items: state.items }
+}
+export const renderInfo = (info: Info, context: RenderContext, state: RenderState) => {
+  const title: TextItem = { type: 'text', text: info.title, size: context.fontSize * 2, align: 'center', x: context.paddingX + context.usableWidth / 2, y: state.y }
+  state.y += context.fontSize * 2
+  state.items.push(title)
+
+  if (info.subTitle) {
+    state.y += context.linePadding / 2
+    const subTitle: TextItem = { type: 'text', text: info.title, size: context.fontSize, align: 'center', x: context.paddingX + context.usableWidth / 2, y: state.y }
+    state.y += context.fontSize
+    state.items.push(subTitle)
+  }
+  state.y += context.linePadding * 2
+
+  if (info.artist) {
+    const artist: TextItem = { type: 'text', align: 'right', text: info.artist, x: context.paddingX + context.usableWidth, y: state.y, size: context.fontSize * 0.75 }
+    state.items.push(artist)
+  }
+  if (info.copyright) {
+    const copyright: TextItem = { type: 'text', align: 'right', text: info.copyright, x: context.paddingX + context.usableWidth, y: state.y + context.lineHeight, size: context.fontSize * 0.75 }
+    state.items.push(copyright)
+  }
+}
+export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: RenderState) => {
+  const { modes, beats, bpms } = sheet
 
   while (state.notationIndex < sheet.notations.length) {
     const rowContext = computeRowContext(sheet, context, state)
@@ -135,8 +203,7 @@ export const render = (sheet: Jianpu, options: Options): RenderResult => {
     let sectionState: SectionState = { pitches: [], underlines: [] }
 
     for (; state.notationIndex <= rowContext.endIndex; state.notationIndex++) {
-      const notation = sheet.notations[state.notationIndex]
-      let time =  1024 / notation.time
+      const item = sheet.notations[state.notationIndex]
 
       let modeRendered = false
       if (modes[state.modeIndex] && modes[state.modeIndex]?.notation === state.notationIndex) {
@@ -154,15 +221,7 @@ export const render = (sheet: Jianpu, options: Options): RenderResult => {
         renderBpm(context, state, bpms[state.bpmIndex])
       }
 
-      if (notation.type === NotationType.Note) {
-        renderNote(context, state, rowContext, sectionState, notation)
-        sectionState.pitches.unshift(notation.pitch)
-        if (notation.dot) time = time * 1.5
-      } else if (notation.type === NotationType.Rest) {
-        renderRest(context, state, rowContext, sectionState, notation)
-      } else {
-        renderTuplet(context, state, rowContext, sectionState, notation)
-      }
+      const time = renderNotation(context, state, rowContext, sectionState, item)
 
       sectionTimer += time
       const currentBeat = Math.floor(sectionTimer / context.beatTime)
@@ -189,27 +248,42 @@ export const render = (sheet: Jianpu, options: Options): RenderResult => {
       }
     }
 
+    // 时值没有达到一拍,用于编辑时渲染
+    if (sectionState.underlines.length > 0) {
+      state.items.push(...mergeUnderlines(sectionState.underlines, context))
+      sectionState.underlines = []
+    }
+
     state.y += context.linePadding + context.lineHeight
     state.x = context.paddingX
   }
 
-  return { width: context.width, height: state.y + context.paddingY, items: state.items, notations: state.notations }
+  // return { width: context.width, height: state.y + context.paddingY, items: state.items, notations: state.notations }
+}
+
+const computeUnderlineY = (y: number, underlineIndex: number, ctx: RenderContext) => {
+  return Math.ceil(y + ctx.notationMargin + ctx.fontSize + underlineIndex * ctx.lineWidth * 2 + ctx.lineWidth)
 }
 const widthComputer = {
   line: (ctx: RenderContext) => ctx.lineWidth + ctx.fontSize,
-  note: (ctx: RenderContext) => ctx.fontSize * 1.33,
-  dot: (ctx: RenderContext) => ctx.fontSize,
+  note: (ctx: RenderContext, time: number) => {
+    let timeScale = 1
+    if (time > 16) timeScale = 0.6
+    else if (time > 8) timeScale = 0.666
+    else if (time > 4) timeScale = 0.75
+
+    return ctx.fontSize * 1.33 * timeScale
+  },
+  dot: (ctx: RenderContext) => ctx.fontSize * 0.666,
   ornaments: (ctx: RenderContext, count: number) => ctx.fontSize * 0.25 * (count + 1),
 }
-
-
 interface RowContext {
   readonly sectionCount: number
   readonly endIndex: number
   readonly usedWidth: number
-   margin: number
+  margin: number
 }
-const computeRowContext = (sheet: Jianpu, ctx: RenderContext, state: RenderState): RowContext => {
+const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: RenderState): RowContext => {
   let usedWidth = 0
   let itemsCount = 0
   let sectionCount = 0
@@ -223,11 +297,11 @@ const computeRowContext = (sheet: Jianpu, ctx: RenderContext, state: RenderState
   }
 
   for(let i = state.notationIndex; i < sheet.notations.length; i++) {
-    const notation = sheet.notations[i]
+    const notation = sheet.notations[i].notation
     let time = 1024 / notation.time
 
     if (notation.type === NotationType.Note) {  // 音符
-      const noteWidth = widthComputer.note(ctx)
+      const noteWidth = widthComputer.note(ctx, notation.time)
       if (notation.time === 1) {
         usedWidth += noteWidth * 4
         itemsCount += 4
@@ -252,10 +326,10 @@ const computeRowContext = (sheet: Jianpu, ctx: RenderContext, state: RenderState
 
       if (notation.ornaments.length > 0) usedWidth += widthComputer.ornaments(ctx, notation.ornaments.length)
     } else if (notation.type === NotationType.Rest) { // 休止符
-      usedWidth += widthComputer.note(ctx)
+      usedWidth += widthComputer.note(ctx, notation.time)
       itemsCount += 1
     } else if (notation.type === NotationType.Tuplet) { // n连音
-      usedWidth += widthComputer.note(ctx) * 0.75 * notation.pitches.length + widthComputer.note(ctx) * 0.25
+      usedWidth += widthComputer.note(ctx, notation.time * 2) * notation.pitches.length
       itemsCount += notation.pitches.length
     }
 
@@ -292,10 +366,9 @@ const computeRowContext = (sheet: Jianpu, ctx: RenderContext, state: RenderState
 }
 
 const renderMode = (ctx: RenderContext, state: RenderState, mode: Mode) => {
-  const modeText = ['A', '♭B', 'B', 'C', '♯C', 'D', '♯D', 'E', 'F', '♯F', 'G', '♯G']
-  const text = '1 = ' + modeText[mode.value]
+  const text = '1 = ' + ModeText[mode.value]
 
-  const item: TextItem = { type: 'text', text, x: state.x, y: state.y, size: ctx.fontSize }
+  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: state.y, size: ctx.fontSize * 0.75 }
   state.items.push(item)
   state.y += ctx.lineHeight
   state.modeIndex++
@@ -304,7 +377,7 @@ const renderBeat = (ctx: RenderContext, state: RenderState, beat: Beat, afterMod
   let x = 0
   let y = 0
   if (afterMode) { // 当前小节已有调号信息则渲染在调号后面
-    x = state.x + ctx.fontSize * 4
+    x = state.x + ctx.fontSize * 3
     y = state.y - ctx.lineHeight
   }
   else {
@@ -313,18 +386,21 @@ const renderBeat = (ctx: RenderContext, state: RenderState, beat: Beat, afterMod
     state.y += ctx.lineHeight
   }
 
-  const item: BeatItem = { type: 'beat', x, y, numerator: beat.numerator + '', denominator: beat.denominator + '', fontSize: ctx.fontSize, lineWidth: ctx.lineWidth }
+  const item: BeatItem = { type: 'beat', x, y, numerator: beat.numerator + '', denominator: beat.denominator + '', fontSize: ctx.fontSize * 0.75, lineWidth: ctx.lineWidth }
   state.items.push(item)
   state.beatIndex++
 }
 const renderBpm = (ctx: RenderContext, state: RenderState, bpm: Bpm) => {
   const text = '𝅘𝅥 = ' + bpm.bpm
-  const item: TextItem = { type: 'text', text, x: state.x, y: state.y, size: ctx.fontSize }
+  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: state.y, size: ctx.fontSize * 0.75 }
   state.items.push(item)
   state.y += ctx.lineHeight
   state.bpmIndex++
 }
 const renderSectionLine = (ctx: RenderContext, state: RenderState, rowContext: RowContext) => {
+  const itemWidth = widthComputer.line(ctx) / 2
+  state.x += itemWidth + rowContext.margin / 2
+
   const item: LineItem = {
     type: 'line',
     x: state.x,
@@ -335,17 +411,39 @@ const renderSectionLine = (ctx: RenderContext, state: RenderState, rowContext: R
   }
   const text: TextItem = {
     type: 'text',
+    align: 'center',
     text: (state.sectionIndex + 2) + '',
-    x: state.x - ctx.fontSize * 0.1,
+    x: state.x,
     y: state.y - ctx.fontSize * 0.666,
     size: ctx.fontSize * 0.4,
   }
 
   state.items.push(item, text)
-  state.x += widthComputer.line(ctx) + rowContext.margin
+  state.x += itemWidth + rowContext.margin / 2
 }
 
-const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, note: Note) => {
+const renderNotation = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation) => {
+  const notation = item.notation
+  let time =  1024 / notation.time
+
+  if (notation.type === NotationType.Note) {
+    renderNote(ctx, state, rowContext, sectionState, item as RenderNotation<Note>)
+    sectionState.pitches.unshift(notation.pitch)
+    if (notation.dot) time = time * 1.5
+  } else if (notation.type === NotationType.Rest) {
+    renderRest(ctx, state, rowContext, sectionState, item as RenderNotation<Rest>)
+  } else {
+    renderTuplet(ctx, state, rowContext, sectionState, item as RenderNotation<Tuplet>)
+  }
+
+  return time
+}
+const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation<Note>) => {
+  const note = item.notation
+
+  const noteWidth = widthComputer.note(ctx, note.time) / 2
+  state.x += noteWidth + rowContext.margin / 2
+
   // 装饰音
   if (note.ornaments.length > 0) {
     let i = 0
@@ -375,37 +473,31 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
   const pitchItems = buildPitch(note.pitch, 1, state.x, state.y + ctx.notationMargin, sectionState, ctx, underLineCount * (ctx.lineWidth + 1))
   state.items.push(...pitchItems)
   sectionState.pitches.unshift(note.pitch)
-  const rendered: RenderedNotation = { 
-    notation: note, 
-    notationIndex: state.notationIndex, 
-    renderItems: [...pitchItems], 
-    x1: state.x, 
-    y1: state.y + ctx.notationMargin, 
-    x2: state.x + widthComputer.note(ctx), 
-    y2: state.y + ctx.lineHeight 
-  }
-  state.notations.push(rendered)
+
+  item.renderItems = [...pitchItems]
+  item.x1 = state.x - noteWidth,
+  item.y1 = state.y + ctx.notationMargin, 
+  item.x2 = state.x + noteWidth,
+  item.y2 = state.y + ctx.notationMargin + ctx.fontSize 
 
   // 圆滑线
   if (note.slur === 1) {
     if (state.slurBegin) console.error('已存在一个圆滑线起始位置！')
 
     const yTop = note.pitch.octave > 0 ? note.pitch.octave : 0
-    state.slurBegin = [state.x + 0.25 * ctx.fontSize, state.y - 0.25 * ctx.fontSize * yTop]
+    state.slurBegin = [state.x, state.y - 0.25 * ctx.fontSize * yTop]
   } else if (note.slur === 2) {
     if (!state.slurBegin) console.error('圆滑线起始位置不存在！')
     else {
       const yTop = note.pitch.octave > 0 ? note.pitch.octave : 0
       let y = state.y - 0.25 * ctx.fontSize * yTop
-      if (y < state.slurBegin[1]) y = state.slurBegin[1]
-
-      const x = state.x + 0.25 * ctx.fontSize
+      if (state.slurBegin[1] < y) y = state.slurBegin[1]
 
       const slur: CurveItem = {
         type: 'curve',
         x: state.slurBegin[0], 
         y: y,
-        toX: x, 
+        toX: state.x, 
         toY: y,
         lineWidth: ctx.lineWidth,
         height: 0.5 * ctx.lineHeight
@@ -415,22 +507,31 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
     }
   }
 
-  state.x += widthComputer.note(ctx) + rowContext.margin
+  state.x += noteWidth + rowContext.margin / 2
 
   // 附点
   if (note.dot && note.time >= 4) {
-    const dot: DotItem = { type: 'dot', x: state.x - ctx.fontSize * 0.25, y: state.y + ctx.fontSize * 0.75, size: ctx.dotSize }
+    state.x += rowContext.margin / 2
+    const dot: DotItem = { type: 'dot', x: state.x + ctx.fontSize * 0.25 - ctx.dotSize / 2, y: state.y + ctx.fontSize * 0.75, size: ctx.dotSize }
     state.items.push(dot)
-    state.x += widthComputer.dot(ctx) + rowContext.margin
+    state.x += widthComputer.dot(ctx) + rowContext.margin / 2
   }
 
   // 全音符和二分音符延音线
   if (note.time < 4) {
     const count = note.time === 1 ? 3 : (note.dot ? 2 : 1)
     for(let i = 0; i < count; i++) {
-      const line: LineItem = { type: 'line', x: state.x, y: state.y + ctx.fontSize * 0.75, toX: state.x + ctx.fontSize * 0.5, toY: state.y + ctx.fontSize * 0.75, width: ctx.lineWidth }
+      state.x += rowContext.margin / 2
+      const line: LineItem = { 
+        type: 'line', 
+        x: state.x + ctx.fontSize * 0.25, 
+        y: state.y + ctx.fontSize * 0.7, 
+        toX: state.x + ctx.fontSize * 0.75, 
+        toY: state.y + ctx.fontSize * 0.7, 
+        width: ctx.lineWidth * 2 
+      }
       state.items.push(line)
-      state.x += widthComputer.note(ctx) + rowContext.margin
+      state.x += widthComputer.note(ctx, 1) + rowContext.margin / 2
     }
   }
 }
@@ -457,11 +558,11 @@ const buildPitch = (pitch: Pitch, scale: number, x: number, y: number, sectionSt
   }
 
   const items: RenderItem[] = []
-  const text: TextItem = { type: 'text', text: pitch.base + '', size, x, y }
+  const text: TextItem = { type: 'text', text: pitch.base + '', size, x, y, align: 'center' }
   items.push(text)
 
   if (accidentalText !== '') {
-    const accidental: TextItem = { type: 'text', text: accidentalText, size: size * 0.75, x: x - size * 0.33, y: y - size * 0.25 }
+    const accidental: TextItem = { type: 'text', text: accidentalText, align: 'right', size: size * 0.75, x: x - size * 0.25, y: y - size * 0.25 }
     items.push(accidental)
   }
 
@@ -469,66 +570,65 @@ const buildPitch = (pitch: Pitch, scale: number, x: number, y: number, sectionSt
   const dotDir = pitch.octave > 0 ? -1 : 1
   if (dotDir === 1) y = y + (size + bottomPadding) * scale
   for (let i = 0; i < dotCount; i++) {
-    const dot: DotItem = { type: 'dot', x: x + size * 0.25, y: y + (0.2 + i * 0.25) * dotDir * size, size: ctx.dotSize * scale }
+    const dot: DotItem = { type: 'dot', x: x, y: y + (0.2 + i * 0.25) * dotDir * size, size: ctx.dotSize * scale }
     items.push(dot)
   }
 
   return items
 }
-const renderRest = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, note: Rest) => {
-  const text: TextItem = { type: 'text', text: '0', size: ctx.fontSize, x: state.x, y: state.y + ctx.notationMargin }
+const renderRest = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation<Rest>) => {
+  const noteWidth = widthComputer.note(ctx, item.notation.time) / 2
+
+  state.x += noteWidth + rowContext.margin / 2
+  const text: TextItem = { type: 'text', text: '0', align: 'center', size: ctx.fontSize, x: state.x, y: state.y + ctx.notationMargin }
   state.items.push(text)
-  const rendered: RenderedNotation = { 
-    notation: note, 
-    notationIndex: state.notationIndex, 
-    renderItems: [text], 
-    x1: state.x, 
-    y1: state.y + ctx.notationMargin, 
-    x2: state.x + widthComputer.note(ctx), 
-    y2: state.y + ctx.lineHeight 
-  }
-  state.notations.push(rendered)
+
+  item.renderItems = [text]
+  item.x1 = state.x - widthComputer.note(ctx, item.notation.time) / 2,
+  item.y1 = state.y + ctx.notationMargin, 
+  item.x2 = state.x + widthComputer.note(ctx, item.notation.time) / 2, 
+  item.y2 = state.y + ctx.notationMargin + ctx.fontSize 
 
   // 时值下划线
-  addUnderline(ctx, state, sectionState, note)
-  state.x += widthComputer.note(ctx) + rowContext.margin
+  addUnderline(ctx, state, sectionState, item.notation)
+  state.x += noteWidth + rowContext.margin / 2
 }
-const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, tuplet: Tuplet) => {
-  let localX = state.x
+const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation<Tuplet>) => {
+  const tuplet = item.notation
+  const itemWidth = widthComputer.note(ctx, tuplet.time * 2) / 2
+  let localX = state.x + itemWidth + rowContext.margin / 2
 
   let lineCount = 0
+  const lineStart = localX - itemWidth / 2
   if (tuplet.time > 2) {
     const idx = [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096].indexOf(tuplet.time)
     lineCount = idx + 1
   }
 
-  const rendered: RenderedNotation = { 
-    notation: tuplet, 
-    notationIndex: state.notationIndex, 
-    renderItems: [], 
-    x1: state.x, 
-    y1: state.y + ctx.notationMargin, 
-    x2: 0, 
-    y2: state.y + ctx.lineHeight 
-  }
-  for(const pitch of tuplet.pitches) {
+  item.renderItems = []
+  item.x1 = localX - itemWidth
+  item.y1 = state.y + ctx.notationMargin
+  for (let i = 0; i < tuplet.pitches.length; i++) {
+    const pitch = tuplet.pitches[i]
     const pitchItems = buildPitch(pitch, 1, localX, state.y + ctx.notationMargin, sectionState, ctx, lineCount * (ctx.lineWidth + 1))
     state.items.push(...pitchItems)
-    rendered.renderItems.push(...pitchItems)
+    item.renderItems.push(...pitchItems)
     sectionState.pitches.unshift(pitch)
-    localX += widthComputer.note(ctx) * 0.75 + rowContext.margin
+    if (i < tuplet.pitches.length - 1) localX += itemWidth * 2 + rowContext.margin
   }
-  rendered.x2 = localX
-  state.notations.push(rendered)
+  const lineEnd = localX + itemWidth / 2
+  localX += itemWidth + rowContext.margin / 2
+  item.x2 = localX
+  item.y2 = state.y + ctx.notationMargin + ctx.fontSize 
 
   for(let i = 0; i < lineCount; i++) {
-    const y = Math.ceil(state.y + ctx.fontSize * 1.25 + i * ctx.lineWidth * 2)
+    const y = computeUnderlineY(state.y, i, ctx)
 
     const line: LineItem = { 
       type: 'line', 
-      x: state.x - ctx.fontSize * 0.2,
+      x: lineStart,
       y: y, 
-      toX: localX - ctx.fontSize * 0.2,
+      toX: lineEnd,
       toY: y, 
       width: ctx.lineWidth 
     }
@@ -540,9 +640,9 @@ const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowCon
   const y = state.y - 0.25 * ctx.fontSize * yTop
   const slur: CurveItem = {
     type: 'curve',
-    x: state.x + 0.25 * ctx.fontSize, 
+    x: state.x, 
     y: y,
-    toX: localX - 0.75 * ctx.fontSize, 
+    toX: localX,
     toY: y,
     lineWidth: ctx.lineWidth,
     height: 0.5 * ctx.lineHeight
@@ -551,7 +651,7 @@ const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowCon
 
   const clear: ClearItem = {
     type: 'clear',
-    x: (state.x + localX - ctx.fontSize) / 2,
+    x: (state.x + localX - ctx.fontSize * 0.5) / 2,
     y: y - 0.75 * ctx.fontSize,
     width: 0.5 * ctx.fontSize,
     height: 0.5 * ctx.fontSize
@@ -561,13 +661,14 @@ const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowCon
   const numText: TextItem = {
     type: 'text',
     text: tuplet.pitches.length + '',
-    x: (state.x + localX - 0.75 * ctx.fontSize) / 2,
+    x: (state.x + localX) / 2,
+    align: 'center',
     y: y - 0.66 * ctx.fontSize,
     size: 0.5 * ctx.fontSize
   }
   state.items.push(numText)
 
-  state.x = localX + widthComputer.note(ctx) * 0.25
+  state.x = localX
 }
 const addUnderline = (ctx: RenderContext, state: RenderState, sectionState: SectionState, notation: Notation) => {
   let lineCount = 0
@@ -576,13 +677,13 @@ const addUnderline = (ctx: RenderContext, state: RenderState, sectionState: Sect
     if (idx >= 0) {
       lineCount = idx + 1
       for(let i = 0; i < lineCount; i++) {
-        const y = Math.ceil(state.y + ctx.fontSize * 1.25 + i * ctx.lineWidth * 2)
+        const y = computeUnderlineY(state.y, i, ctx)
 
         const line: LineItem = { 
           type: 'line', 
-          x: state.x - ctx.fontSize * 0.2, 
+          x: state.x - widthComputer.note(ctx, notation.time ) / 4,
           y: y, 
-          toX: state.x + ctx.fontSize * 0.7, 
+          toX: state.x + widthComputer.note(ctx, notation.time ) / 4,
           toY: y, 
           width: ctx.lineWidth,
           notation: state.notationIndex
@@ -638,11 +739,11 @@ const mergeUnderlines = (underlines: LineItem[], ctx: RenderContext) => {
   return result
 }
 
-export const paint = (ctx: CanvasRenderingContext2D, options: RenderResult, style?: string) => {
+export const paint = (ctx: CanvasRenderingContext2D, data: RenderResult, style?: string) => {
   ctx.fillStyle = style ?? '#333'
   ctx.strokeStyle = style ?? '#333'
 
-  for (const item of options.items) {
+  for (const item of data.items) {
     switch (item.type) {
       case 'text': paintText(ctx, item as TextItem); break;
       case 'beat': paintBeat(ctx, item as BeatItem); break;
@@ -670,10 +771,14 @@ export const paintItem = (ctx: CanvasRenderingContext2D, item: RenderItem, style
     default: break;
   }
 }
+export const eraseNotation = (ctx: CanvasRenderingContext2D, notation: RenderNotation) => {
+  ctx.clearRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
+}
 
 const paintText = (ctx: CanvasRenderingContext2D, item: TextItem) => {
   ctx.font = `${item.size}px arial`
   ctx.textBaseline = 'top'
+  ctx.textAlign = item.align
   ctx.fillText(item.text, item.x, item.y)
 }
 const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem) => {

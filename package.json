@@ -1,16 +1,21 @@
 {
   "name": "pzjianpu",
-  "version": "0.0.1",
-  "description": "",
-  "main": "src/index.ts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build.dev": "node ./esbuild/build.cjs --watch",
-    "build.prod": "node ./esbuild/build.cjs --prod"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
   },
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
-    "esbuild": "^0.23.0",
-    "typescript": "^5.1.6"
+    "@sveltejs/vite-plugin-svelte": "^3.1.1",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte": "^4.2.18",
+    "svelte-check": "^3.8.4",
+    "tslib": "^2.6.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.3.4"
   }
 }

@@ -1,0 +1,57 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #111;
+  background-color: #fff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 1280px;
+  min-height: 100vh;
+}
+
+.sheet-container {
+  flex: 1;
+  height: 100vh;
+  border-right: 1px solid #111;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+
+#app {
+  width: 500px;
+  height: 100vh;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+}
+
+button {
+  padding: 0.5rem 0.5rem;
+  background-color: #5684e7;
+  color: #fff;
+  border-radius: 0.33rem;
+  border: none;
+  min-width: 4rem;
+  cursor: pointer;
+}
+button:hover {
+  background-color: #1d4fbb;
+}
+

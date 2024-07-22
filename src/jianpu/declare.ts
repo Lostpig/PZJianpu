@@ -1,5 +1,5 @@
 
-export interface Jianpu {
+export interface Sheet {
   info: Info
   notations: Notation[]
   repeats: Repeat[]   // TODO
@@ -38,6 +38,7 @@ export interface Bpm {
 // 调号
 //                      A  #A   B   C  #C   D  #D   E   F  #F   G    #G
 export type ModeValue = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11
+export const ModeText = ['A', '♭B', 'B', 'C', '♯C', 'D', '♯D', 'E', 'F', '♯F', 'G', '♯G']
 export interface Mode {
   notation: number     // 生效起始音符
   value: ModeValue
@@ -65,7 +66,6 @@ export interface Note {
 export interface Rest {
   type: (typeof NotationType)['Rest']
   time: number          // 时值
-  dot: boolean          // 附点
 }
 export interface Tuplet {
   type: (typeof NotationType)['Tuplet']
@@ -76,7 +76,8 @@ export type Notation = Note | Rest | Tuplet
 
 export interface Options {
   width: number
-  padding: [number, number]
+  paddingX: number
+  paddingY: number
   fontsize: number
   linePadding: number
 }

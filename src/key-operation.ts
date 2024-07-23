@@ -65,10 +65,10 @@ const defaultNote: Note = {
 }
 
 const setNotation = (jianpu: Jianpu, num: number) => {
-  if (jianpu.selectedIndex < 0) return
   if (num > 7 || num < 0) return
-
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
+  
   if (num === 0) {
     jianpu.updateNotation({ type: NotationType.Rest, time: notation.time }, jianpu.selectedIndex)
   } else {
@@ -92,24 +92,22 @@ const moveSelected = (jianpu: Jianpu, param: 1 | -1) => {
   if (jianpu.selectedIndex < 0) { // 无选中状态,左选中最后一个,右选中第一个
     if (param === 1) jianpu.selectNotation(0)
     else jianpu.selectNotation(jianpu.notationCount - 1)
-    jianpu.render()
   } else {
     const index = jianpu.selectedIndex + param
     if (index > jianpu.notationCount - 1) {
-      const last = jianpu.getNotation(jianpu.selectedIndex)
+      const last = jianpu.getNotation(jianpu.selectedIndex)!
+      if (last.type === NotationType.Note) last.slur = 0  // 复制时不复制圆滑线
       jianpu.addNotation(last)
     } else if (index < 0) {
       jianpu.selectNotation(0)
-      jianpu.render()
     } else {
       jianpu.selectNotation(index)
-      jianpu.render()
     }
   }
 }
 const changeoctave = (jianpu: Jianpu, param: 1 | -1) => {
-  if (jianpu.selectedIndex < 0) return
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
 
   if (notation.type !== NotationType.Note) return
   notation.pitch.octave += param
@@ -119,8 +117,8 @@ const changeoctave = (jianpu: Jianpu, param: 1 | -1) => {
   jianpu.updateNotation(notation, jianpu.selectedIndex)
 }
 const changeTime = (jianpu: Jianpu, param: 1 | -1) => {
-  if (jianpu.selectedIndex < 0) return
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
   notation.time *= param === 1 ? 2 : 0.5
 
   if (notation.time > 64) notation.time = 64
@@ -129,8 +127,8 @@ const changeTime = (jianpu: Jianpu, param: 1 | -1) => {
   jianpu.updateNotation(notation, jianpu.selectedIndex)
 }
 const changeAccidental = (jianpu: Jianpu, param: 1 | -1) => {
-  if (jianpu.selectedIndex < 0) return
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
 
   if (notation.type !== NotationType.Note) return
   notation.pitch.accidental += param
@@ -140,8 +138,8 @@ const changeAccidental = (jianpu: Jianpu, param: 1 | -1) => {
   jianpu.updateNotation(notation, jianpu.selectedIndex)
 }
 const toggleDot = (jianpu: Jianpu) => {
-  if (jianpu.selectedIndex < 0) return
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
 
   if (notation.type !== NotationType.Note) return
   notation.dot = !notation.dot
@@ -151,7 +149,9 @@ const toggleDot = (jianpu: Jianpu) => {
 
 const insertNotation = (jianpu: Jianpu) => {
   if (jianpu.selectedIndex >= 0) {
-    const current = jianpu.getNotation(jianpu.selectedIndex)
+    const current = jianpu.getNotation(jianpu.selectedIndex)!
+
+    if (current.type === NotationType.Note) current.slur = 0  // 复制时不复制圆滑线
     jianpu.addNotation(current, jianpu.selectedIndex)
   } else {
     jianpu.addNotation(defaultNote)
@@ -162,8 +162,8 @@ const deleteNotation = (jianpu: Jianpu) => {
 }
 
 const setSlur = (jianpu: Jianpu, param: 0 | 1 | 2) => {
-  if (jianpu.selectedIndex < 0) return
   const notation = jianpu.getNotation(jianpu.selectedIndex)
+  if (!notation) return
 
   if (notation.type !== NotationType.Note) return
   notation.slur = param

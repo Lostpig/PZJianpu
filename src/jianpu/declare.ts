@@ -80,4 +80,11 @@ export interface Options {
   paddingY: number
   fontsize: number
   linePadding: number
+  style: SheetStyle
+}
+
+export interface SheetStyle {
+  font: string
+  fillColor: string
+  backgroundColor: string
 }

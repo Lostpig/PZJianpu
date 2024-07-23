@@ -1,4 +1,4 @@
-import type { Sheet, Mode, Beat, Bpm, Notation, Note, Pitch, Rest, Tuplet, Options, Info  } from './declare'
+import type { Sheet, Mode, Beat, Bpm, Notation, Note, Pitch, Rest, Tuplet, Options, Info, SheetStyle  } from './declare'
 import { NotationType, ModeText } from './declare'
 
 type RenderType = 'text' | 'beat' | 'line' | 'dot' | 'curve' | 'arc' | 'clear'
@@ -13,6 +13,7 @@ interface TextItem extends RenderItem {
   text: string
   size: number
   align: 'center' | 'left' | 'right'
+  baseline?: 'top' | 'bottom'
 }
 interface BeatItem extends RenderItem {
   type: 'beat'
@@ -41,8 +42,8 @@ interface CurveItem extends RenderItem {
 interface ArcItem extends RenderItem {
   type: 'arc'
   width: number
-  r: number
-  angle: [number, number]
+  toX: number
+  toY: number
 }
 interface ClearItem extends RenderItem {
   type: 'clear'
@@ -50,6 +51,10 @@ interface ClearItem extends RenderItem {
   height: number
 }
 
+export interface RenderError {
+  index: number
+  message: string
+}
 export interface RenderNotation<T = Notation> {
   notation: T
   renderItems: RenderItem[]
@@ -65,6 +70,7 @@ export interface RenderResult {
   width: number
   height: number
   items: RenderItem[]
+  errors: RenderError[]
 }
 
 interface RenderContext {
@@ -91,6 +97,7 @@ interface RenderState {
   bpmIndex: number
   beatIndex: number
   items: RenderItem[]
+  errors: RenderError[]
 }
 interface SectionState {
   pitches: Pitch[]
@@ -125,6 +132,9 @@ export const preRenderSheet = (sheet: Sheet) => {
   return renderSheet
 }
 
+const renderLog = (message: string, state: RenderState) => {
+  state.errors.push({ index: state.notationIndex, message })
+}
 const checkSheet = (sheet: RenderSheet)  => {
   const result: { success: boolean, messages: string[] } = { success: true, messages: [] }
   if (sheet.modes.length === 0 || sheet.modes[0].notation !== 0) {
@@ -161,13 +171,14 @@ export const render = (sheet: RenderSheet, options: Options): RenderResult => {
     modeIndex: 0,
     bpmIndex: 0,
     beatIndex: 0,
-    items: []
+    items: [],
+    errors: []
   }
 
   renderInfo(sheet.info, context, state)
   renderSheet(sheet, context, state)
 
-  return { width: context.width, height: state.y + context.paddingY, items: state.items }
+  return { width: context.width, height: state.y + context.paddingY, items: state.items, errors: state.errors }
 }
 export const renderInfo = (info: Info, context: RenderContext, state: RenderState) => {
   const title: TextItem = { type: 'text', text: info.title, size: context.fontSize * 2, align: 'center', x: context.paddingX + context.usableWidth / 2, y: state.y }
@@ -180,7 +191,7 @@ export const renderInfo = (info: Info, context: RenderContext, state: RenderStat
     state.y += context.fontSize
     state.items.push(subTitle)
   }
-  state.y += context.linePadding * 2
+  state.y += context.paddingX
 
   if (info.artist) {
     const artist: TextItem = { type: 'text', align: 'right', text: info.artist, x: context.paddingX + context.usableWidth, y: state.y, size: context.fontSize * 0.75 }
@@ -202,7 +213,8 @@ export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: R
     let beatCount = 0
     let sectionState: SectionState = { pitches: [], underlines: [] }
 
-    for (; state.notationIndex <= rowContext.endIndex; state.notationIndex++) {
+    const endIndex = rowContext.startIndex + rowContext.count
+    for (; state.notationIndex < endIndex; state.notationIndex++) {
       const item = sheet.notations[state.notationIndex]
 
       let modeRendered = false
@@ -211,7 +223,7 @@ export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: R
         modeRendered = true
       }
       if (beats[state.beatIndex] && beats[state.beatIndex]?.notation === state.notationIndex) {
-        if (!sectionStartFlag) console.error('拍号变更必须在小节的起始处!', `notation: ${state.notationIndex}`)
+        if (!sectionStartFlag) renderLog('拍号变更必须在小节的起始处!', state)
         // 拍号变化了要同时更改小节时值
         context.sectionTime = (1024 / beats[state.beatIndex].denominator) * beats[state.beatIndex].numerator
         context.beatTime = 1024 / beats[state.beatIndex].denominator
@@ -234,7 +246,7 @@ export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: R
 
       if (sectionTimer >= context.sectionTime) {
         if (sectionTimer > context.sectionTime) {
-          console.log('小节时值错误', `section: ${state.sectionIndex}`)
+          renderLog('小节时值错误', state)
         }
         renderSectionLine(context, state, rowContext)
 
@@ -257,49 +269,55 @@ export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: R
     state.y += context.linePadding + context.lineHeight
     state.x = context.paddingX
   }
-
-  // return { width: context.width, height: state.y + context.paddingY, items: state.items, notations: state.notations }
 }
 
 const computeUnderlineY = (y: number, underlineIndex: number, ctx: RenderContext) => {
   return Math.ceil(y + ctx.notationMargin + ctx.fontSize + underlineIndex * ctx.lineWidth * 2 + ctx.lineWidth)
 }
 const widthComputer = {
-  line: (ctx: RenderContext) => ctx.lineWidth + ctx.fontSize,
+  line: (ctx: RenderContext) => ctx.lineWidth + ctx.fontSize * 0.5,
   note: (ctx: RenderContext, time: number) => {
     let timeScale = 1
     if (time > 16) timeScale = 0.6
     else if (time > 8) timeScale = 0.666
     else if (time > 4) timeScale = 0.75
 
-    return ctx.fontSize * 1.33 * timeScale
+    return ctx.fontSize * 1.25 * timeScale
   },
-  dot: (ctx: RenderContext) => ctx.fontSize * 0.666,
-  ornaments: (ctx: RenderContext, count: number) => ctx.fontSize * 0.25 * (count + 1),
+  dot: (ctx: RenderContext) => ctx.fontSize * 0.333,
+  ornaments: (ctx: RenderContext, count: number) => ctx.fontSize * 0.33 * count + ctx.fontSize * 0.2,
 }
 interface RowContext {
+  readonly startIndex: number
+  readonly count: number
   readonly sectionCount: number
-  readonly endIndex: number
   readonly usedWidth: number
-  margin: number
+  readonly xPositions: number[]
+  readonly margin: number
 }
 const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: RenderState): RowContext => {
   let usedWidth = 0
   let itemsCount = 0
   let sectionCount = 0
   let timer = 0
+  let notationCount = 0
+  const xPositions: number[] = []
 
   let rowContext: RowContext = {
     sectionCount: 0,
-    endIndex: 0,
+    startIndex: state.notationIndex,
+    count: 0,
     usedWidth: 0,
-    margin: 0
+    margin: 0,
+    xPositions: []
   }
 
   for(let i = state.notationIndex; i < sheet.notations.length; i++) {
     const notation = sheet.notations[i].notation
     let time = 1024 / notation.time
 
+    notationCount++
+    xPositions.push(usedWidth)
     if (notation.type === NotationType.Note) {  // 音符
       const noteWidth = widthComputer.note(ctx, notation.time)
       if (notation.time === 1) {
@@ -319,10 +337,8 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
         if (notation.dot) {
           usedWidth += widthComputer.dot(ctx)
           time = time * 1.5
-          itemsCount += 1
         }
       }
-
 
       if (notation.ornaments.length > 0) usedWidth += widthComputer.ornaments(ctx, notation.ornaments.length)
     } else if (notation.type === NotationType.Rest) { // 休止符
@@ -341,26 +357,30 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
     if (timer >= ctx.sectionTime) {
       timer = 0
       sectionCount += 1
-      itemsCount += 1
 
-      const margin = usedWidth >= ctx.usableWidth ? 0 : ((ctx.usableWidth - usedWidth) / (itemsCount - 1))
+      const margin = usedWidth >= ctx.usableWidth ? 0 : (ctx.usableWidth - usedWidth) / (itemsCount + 0.5)
       rowContext = {
-        endIndex: i,
+        startIndex: state.notationIndex,
+        count: notationCount,
         sectionCount: sectionCount,
         usedWidth: usedWidth,
-        margin
+        margin,
+        xPositions: [...xPositions]
       }
 
+      itemsCount += 1
       usedWidth += widthComputer.line(ctx)
     }
   }
 
   // 到结尾没跳出,说明不满一行
   rowContext = {
-    endIndex: sheet.notations.length - 1,
+    startIndex: state.notationIndex,
+    count: notationCount,
     sectionCount,
     usedWidth,
-    margin: 0
+    margin: 0,
+    xPositions
   }
   return rowContext
 }
@@ -397,30 +417,6 @@ const renderBpm = (ctx: RenderContext, state: RenderState, bpm: Bpm) => {
   state.y += ctx.lineHeight
   state.bpmIndex++
 }
-const renderSectionLine = (ctx: RenderContext, state: RenderState, rowContext: RowContext) => {
-  const itemWidth = widthComputer.line(ctx) / 2
-  state.x += itemWidth + rowContext.margin / 2
-
-  const item: LineItem = {
-    type: 'line',
-    x: state.x,
-    y: state.y,
-    toX: state.x,
-    toY: state.y + ctx.lineHeight,
-    width: ctx.lineWidth
-  }
-  const text: TextItem = {
-    type: 'text',
-    align: 'center',
-    text: (state.sectionIndex + 2) + '',
-    x: state.x,
-    y: state.y - ctx.fontSize * 0.666,
-    size: ctx.fontSize * 0.4,
-  }
-
-  state.items.push(item, text)
-  state.x += itemWidth + rowContext.margin / 2
-}
 
 const renderNotation = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation) => {
   const notation = item.notation
@@ -443,25 +439,41 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
 
   const noteWidth = widthComputer.note(ctx, note.time) / 2
   state.x += noteWidth + rowContext.margin / 2
+  item.renderItems = []
 
   // 装饰音
   if (note.ornaments.length > 0) {
     let i = 0
     for(const o of note.ornaments) {
-      const items = buildPitch(o, 0.5, state.x + i * ctx.fontSize * 0.25, state.y, { pitches: [], underlines: [] }, ctx, 0)
+      const items = buildPitch(o, 0.5, state.x + i * ctx.fontSize * 0.33, state.y - 4 * ctx.lineWidth, { pitches: [], underlines: [] }, ctx, 2)
       state.items.push(...items)
+      item.renderItems.push(...items)
       i++
     }
 
+    const lineWidth = Math.max(1, ctx.lineWidth / 2)
+    const line: LineItem = {
+      type: 'line',
+      width: lineWidth,
+      x: state.x - ctx.fontSize * 0.1,
+      toX: state.x + note.ornaments.length * ctx.fontSize * 0.33 - ctx.fontSize * 0.2,
+      y: state.y + ctx.fontSize * 0.25,
+      toY: state.y + ctx.fontSize * 0.25
+    }
+    state.items.push(line)
+    item.renderItems.push(line)
+
+    const arcSize = ctx.fontSize * 0.4
     const arc: ArcItem = { 
       type: 'arc', 
-      x: state.x + ctx.fontSize * (0.25 * (note.ornaments.length - 1) + 0.5),
-      y: state.y + ctx.fontSize * 0.5, 
-      r: ctx.fontSize / 3, 
-      angle: [Math.PI * 0.5, Math.PI], 
-      width: ctx.lineWidth 
+      width: lineWidth,
+      x: (line.x + line.toX) / 2,
+      y: state.y + ctx.fontSize * 0.25, 
+      toX: (line.x + line.toX) / 2 + arcSize,
+      toY: state.y + ctx.fontSize * 0.25 + arcSize
     }
     state.items.push(arc)
+    item.renderItems.push(arc)
 
     state.x += widthComputer.ornaments(ctx, note.ornaments.length)
   }
@@ -474,7 +486,7 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
   state.items.push(...pitchItems)
   sectionState.pitches.unshift(note.pitch)
 
-  item.renderItems = [...pitchItems]
+  item.renderItems.push(...pitchItems)
   item.x1 = state.x - noteWidth,
   item.y1 = state.y + ctx.notationMargin, 
   item.x2 = state.x + noteWidth,
@@ -482,12 +494,12 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
 
   // 圆滑线
   if (note.slur === 1) {
-    if (state.slurBegin) console.error('已存在一个圆滑线起始位置！')
+    if (state.slurBegin) renderLog('已存在一个圆滑线起始位置！', state)
 
     const yTop = note.pitch.octave > 0 ? note.pitch.octave : 0
     state.slurBegin = [state.x, state.y - 0.25 * ctx.fontSize * yTop]
   } else if (note.slur === 2) {
-    if (!state.slurBegin) console.error('圆滑线起始位置不存在！')
+    if (!state.slurBegin) renderLog('圆滑线起始位置不存在！', state)
     else {
       const yTop = note.pitch.octave > 0 ? note.pitch.octave : 0
       let y = state.y - 0.25 * ctx.fontSize * yTop
@@ -511,10 +523,10 @@ const renderNote = (ctx: RenderContext, state: RenderState, rowContext: RowConte
 
   // 附点
   if (note.dot && note.time >= 4) {
-    state.x += rowContext.margin / 2
-    const dot: DotItem = { type: 'dot', x: state.x + ctx.fontSize * 0.25 - ctx.dotSize / 2, y: state.y + ctx.fontSize * 0.75, size: ctx.dotSize }
+    const dot: DotItem = { type: 'dot', x: state.x, y: state.y + ctx.fontSize * 0.75, size: ctx.dotSize }
     state.items.push(dot)
-    state.x += widthComputer.dot(ctx) + rowContext.margin / 2
+    item.renderItems.push(dot)
+    state.x += widthComputer.dot(ctx)
   }
 
   // 全音符和二分音符延音线
@@ -568,7 +580,7 @@ const buildPitch = (pitch: Pitch, scale: number, x: number, y: number, sectionSt
 
   const dotCount = Math.abs(pitch.octave)
   const dotDir = pitch.octave > 0 ? -1 : 1
-  if (dotDir === 1) y = y + (size + bottomPadding) * scale
+  if (dotDir === 1) y = y + size + bottomPadding * scale
   for (let i = 0; i < dotCount; i++) {
     const dot: DotItem = { type: 'dot', x: x, y: y + (0.2 + i * 0.25) * dotDir * size, size: ctx.dotSize * scale }
     items.push(dot)
@@ -670,6 +682,31 @@ const renderTuplet = (ctx: RenderContext, state: RenderState, rowContext: RowCon
 
   state.x = localX
 }
+const renderSectionLine = (ctx: RenderContext, state: RenderState, rowContext: RowContext) => {
+  const itemWidth = widthComputer.line(ctx) / 2
+  state.x += itemWidth + rowContext.margin / 2
+
+  const item: LineItem = {
+    type: 'line',
+    x: state.x,
+    y: state.y,
+    toX: state.x,
+    toY: state.y + ctx.lineHeight,
+    width: ctx.lineWidth
+  }
+  const text: TextItem = {
+    type: 'text',
+    align: 'center',
+    text: (state.sectionIndex + 2) + '',
+    x: state.x,
+    y: state.y - ctx.fontSize * 0.666,
+    size: ctx.fontSize * 0.4,
+  }
+
+  state.items.push(item, text)
+  state.x += itemWidth + rowContext.margin / 2
+}
+
 const addUnderline = (ctx: RenderContext, state: RenderState, sectionState: SectionState, notation: Notation) => {
   let lineCount = 0
   if (notation.time > 4) {
@@ -739,51 +776,41 @@ const mergeUnderlines = (underlines: LineItem[], ctx: RenderContext) => {
   return result
 }
 
-export const paint = (ctx: CanvasRenderingContext2D, data: RenderResult, style?: string) => {
-  ctx.fillStyle = style ?? '#333'
-  ctx.strokeStyle = style ?? '#333'
-
+export const paint = (ctx: CanvasRenderingContext2D, data: RenderResult, style: SheetStyle) => {
   for (const item of data.items) {
-    switch (item.type) {
-      case 'text': paintText(ctx, item as TextItem); break;
-      case 'beat': paintBeat(ctx, item as BeatItem); break;
-      case 'line': paintLine(ctx, item as LineItem); break;
-      case 'curve': paintCurve(ctx, item as CurveItem); break;
-      case 'dot': paintDot(ctx, item as DotItem); break;
-      case 'arc': paintArc(ctx, item as ArcItem); break;
-      case 'clear': paintClear(ctx, item as ClearItem); break;
-      default: break;
-    }
+    paintItem(ctx, item, style)
   }
 }
-export const paintItem = (ctx: CanvasRenderingContext2D, item: RenderItem, style?: string) => {
-  ctx.fillStyle = style ?? '#333'
-  ctx.strokeStyle = style ?? '#333'
-
+export const paintItem = (ctx: CanvasRenderingContext2D, item: RenderItem, style: SheetStyle) => {
   switch (item.type) {
-    case 'text': paintText(ctx, item as TextItem); break;
-    case 'beat': paintBeat(ctx, item as BeatItem); break;
-    case 'line': paintLine(ctx, item as LineItem); break;
-    case 'curve': paintCurve(ctx, item as CurveItem); break;
-    case 'dot': paintDot(ctx, item as DotItem); break;
-    case 'arc': paintArc(ctx, item as ArcItem); break;
-    case 'clear': paintClear(ctx, item as ClearItem); break;
+    case 'text': paintText(ctx, item as TextItem, style); break;
+    case 'beat': paintBeat(ctx, item as BeatItem, style); break;
+    case 'line': paintLine(ctx, item as LineItem, style); break;
+    case 'curve': paintCurve(ctx, item as CurveItem, style); break;
+    case 'dot': paintDot(ctx, item as DotItem, style); break;
+    case 'arc': paintArc(ctx, item as ArcItem, style); break;
+    case 'clear': paintClear(ctx, item as ClearItem, style); break;
     default: break;
   }
 }
-export const eraseNotation = (ctx: CanvasRenderingContext2D, notation: RenderNotation) => {
-  ctx.clearRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
+export const eraseNotation = (ctx: CanvasRenderingContext2D, notation: RenderNotation, style: SheetStyle) => {
+  ctx.fillStyle = style.backgroundColor
+  ctx.fillRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
 }
 
-const paintText = (ctx: CanvasRenderingContext2D, item: TextItem) => {
-  ctx.font = `${item.size}px arial`
-  ctx.textBaseline = 'top'
+const paintText = (ctx: CanvasRenderingContext2D, item: TextItem, style: SheetStyle) => {
+  ctx.fillStyle = style.fillColor
+  
+  ctx.font = `${item.size}px ${style.font}`
+  ctx.textBaseline = item.baseline ?? 'top'
   ctx.textAlign = item.align
   ctx.fillText(item.text, item.x, item.y)
 }
-const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem) => {
-  ctx.font = `${item.fontSize}px arial`
+const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem, style: SheetStyle) => {
+  ctx.font = `${item.fontSize}px ${style.font}`
   ctx.textBaseline = 'top'
+  ctx.fillStyle = style.fillColor
+  ctx.strokeStyle = style.fillColor
 
   ctx.fillText(item.numerator, item.x, item.y - item.fontSize * 0.6)
 
@@ -795,16 +822,19 @@ const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem) => {
 
   ctx.fillText(item.denominator, item.x, item.y + item.fontSize * 0.6)
 }
-const paintLine = (ctx: CanvasRenderingContext2D, item: LineItem) => {
+const paintLine = (ctx: CanvasRenderingContext2D, item: LineItem, style: SheetStyle) => {
+  ctx.strokeStyle = style.fillColor
+  
   ctx.beginPath()
   ctx.moveTo(item.x, item.y)
   ctx.lineTo(item.toX, item.toY)
   ctx.lineWidth = item.width
   ctx.stroke()
 }
-const paintCurve = (ctx: CanvasRenderingContext2D, item: CurveItem) => {
+const paintCurve = (ctx: CanvasRenderingContext2D, item: CurveItem, style: SheetStyle) => {
   const w = (item.toX - item.x) / 3
   const h = item.height * 0.75
+  ctx.strokeStyle = style.fillColor
 
   ctx.lineWidth = item.lineWidth
   ctx.beginPath()
@@ -812,19 +842,24 @@ const paintCurve = (ctx: CanvasRenderingContext2D, item: CurveItem) => {
   ctx.bezierCurveTo(item.x + w, item.y - h, item.x + w * 2, item.y - h, item.toX, item.toY)
   ctx.stroke()
 }
-const paintDot = (ctx: CanvasRenderingContext2D, item: DotItem) => {
+const paintDot = (ctx: CanvasRenderingContext2D, item: DotItem, style: SheetStyle) => {
+  ctx.fillStyle = style.fillColor
+
   ctx.beginPath()
   ctx.moveTo(item.x, item.y)
   ctx.arc(item.x, item.y, item.size, 0, 2 * Math.PI)
   ctx.fill()
 }
-const paintArc = (ctx: CanvasRenderingContext2D, item: ArcItem) => {
+const paintArc = (ctx: CanvasRenderingContext2D, item: ArcItem, style: SheetStyle) => {
   ctx.lineWidth = item.width
+  ctx.strokeStyle = style.fillColor
 
   ctx.beginPath()
-  ctx.arc(item.x, item.y, item.r, item.angle[0], item.angle[1])
+  ctx.moveTo(item.x, item.y)
+  ctx.arcTo(item.x, item.toY, item.toX, item.toY, (item.toX - item.x) / 2)
   ctx.stroke()
 }
-const paintClear = (ctx: CanvasRenderingContext2D, item: ClearItem) => {
-  ctx.clearRect(item.x, item.y, item.width, item.height)
+const paintClear = (ctx: CanvasRenderingContext2D, item: ClearItem, style: SheetStyle) => {
+  ctx.fillStyle = style.backgroundColor
+  ctx.fillRect(item.x, item.y, item.width, item.height)
 }

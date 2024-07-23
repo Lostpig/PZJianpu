@@ -28,6 +28,7 @@ body {
   display: flex;
   align-items: center;
   flex-direction: column;
+  background-color: #efefef;
 }
 
 #app {
@@ -43,12 +44,11 @@ select:focus {
 }
 
 button {
-  padding: 0.5rem 0.5rem;
+  padding: 0.5rem 1rem;
   background-color: #5684e7;
   color: #fff;
   border-radius: 0.33rem;
   border: none;
-  min-width: 4rem;
   cursor: pointer;
 }
 button:hover {

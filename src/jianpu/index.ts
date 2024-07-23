@@ -1,4 +1,4 @@
-import type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet } from './declare'
+import type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, SheetStyle } from './declare'
 import { NotationType, ModeText } from './declare'
 import type { RenderSheet } from './render'
 import { preRenderSheet, render, paint, paintItem, preRenderNotation, eraseNotation } from './render'
@@ -13,6 +13,8 @@ export type JianpuEventHandler<T extends JianpuEventName> = (instance: Jianpu, e
 
 const selectedColor = '#3471ff'
 const cloneNotation = (notation: Notation): Notation => {
+  if (!notation) return notation
+
   if (notation.type === NotationType.Note) {
     const ornaments = notation.ornaments.map(p => ({...p}))
     const pitch = {
@@ -39,10 +41,11 @@ const cloneNotation = (notation: Notation): Notation => {
 }
 
 export class Jianpu {
-  private _options: Options
-  private _renderSheet: RenderSheet
+  private _options!: Options
+  private _renderSheet!: RenderSheet
   private _context?: CanvasRenderingContext2D
   private _eventHandlers = new Map<JianpuEventName, JianpuEventHandler<any>[]>()
+  private _selectedStyle: SheetStyle
   public DEBUG: boolean = false
 
   static DefaultSheet(): Sheet {
@@ -71,13 +74,24 @@ export class Jianpu {
       paddingX: 80,
       paddingY: 100,
       fontsize: 32,
-      linePadding: 40
+      linePadding: 60,
+      style: {
+        fillColor: '#333333',
+        backgroundColor: '#ffffff',
+        font: 'Arial'
+      }
     }
   }
 
   constructor(sheet?: Sheet, options?: Options) {
     this.setSheet(sheet ?? Jianpu.DefaultSheet())
     this.setOptions(options ?? Jianpu.DefaultOptions())
+
+    this._selectedStyle = {
+      fillColor: '#2769fe',
+      backgroundColor: this._options.style.backgroundColor,
+      font: this._options.style.font
+    }
   }
   setSheet(sheet: Sheet) {
     const clone: Sheet = {
@@ -90,7 +104,8 @@ export class Jianpu {
     }
     this._renderSheet = preRenderSheet(clone)
 
-    this.selectNotation(-1)
+    this._selectdIndex = -1
+    this.dispatch('NotationSelected', { notation: undefined, index: -1 })
     this.render()
   }
   getSheet() {
@@ -132,7 +147,6 @@ export class Jianpu {
       const y = ev.clientY - rect.top
       if (this.DEBUG) console.log(`click point: x:${x}  y:${y}`)
   
-      const last = this._selectdIndex
       let selected = -1
       for(let i = 0; i < this._renderSheet.notations.length; i++) {
         const n = this._renderSheet.notations[i]
@@ -142,20 +156,24 @@ export class Jianpu {
         }
       }
 
-      this.selectNotation(selected)
-      if (last >= 0 && last !== selected) {
-        this.paintNotation(last)
-      }
-      if (selected >= 0 && selected !== last) {
-        this.paintNotation(selected, selectedColor)
-      }
+      this.selectNotation(selected, true)
     })
   }
-  selectNotation(index: number) {
-    if (this._selectdIndex === index) return
-    this._selectdIndex = index
-    const notation = this._renderSheet.notations[index]
+  selectNotation(index: number, toggle = false) {
+    if (this._selectdIndex === index) {
+      if (toggle) {
+        this._selectdIndex = -1
+        this.paintNotation(index)
+      }
+      return
+    }
 
+    const last = this._selectdIndex
+    this._selectdIndex = index
+    this.paintNotation(last)
+    this.paintNotation(index)
+
+    const notation = this._renderSheet.notations[index]
     const event: JianpuEvent<'NotationSelected'> = {
       notation: notation ? cloneNotation(notation.notation) : undefined,
       index: this._selectdIndex
@@ -187,22 +205,37 @@ export class Jianpu {
     this._context.canvas.width = result.width
     this._context.canvas.height = result.height
 
-    paint(this._context, result)
-    if (this._selectdIndex >= 0) this.paintNotation(this._selectdIndex, selectedColor)
+    this._context.fillStyle = this._options.style.backgroundColor
+    this._context.fillRect(0, 0, result.width, result.height)
+    if (this.DEBUG) {
+      this._context.fillStyle = '#ffddaa'
+      this._context.fillRect(
+        this._options.paddingX, 
+        this._options.paddingY, 
+        result.width - this._options.paddingX * 2, 
+        result.height - this._options.paddingY * 2)
+      
+      if (result.errors.length > 0) {
+        result.errors.forEach(err => console.log(`${err.index}: ${err.message}`))
+      }
+    }
+
+    paint(this._context, result, this._options.style)
+    if (this._selectdIndex >= 0) this.paintNotation(this._selectdIndex)
   }
-  paintNotation (index: number, style?: string) {
+  paintNotation (index: number) {
     if (!this._context) return
     if (index < 0) return
 
     const notation = this._renderSheet.notations[index]
+    eraseNotation(this._context, notation, this._options.style)
 
-    eraseNotation(this._context, notation)
-    if (this.DEBUG) {
-      this._context.strokeStyle = '#ff6633'
-      this._context.strokeRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
-      console.log(`paint notation rect: [${notation.x1}, ${notation.x2}, ${notation.y1}, ${notation.y2}]`)
+    const style = index === this._selectdIndex ? this._selectedStyle : this._options.style
+    if (index === this._selectdIndex) {
+      this._context.fillStyle = '#e7e7e7'
+      this._context.fillRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
+      console.log(`selected notation rect: [${notation.x1}, ${notation.x2}, ${notation.y1}, ${notation.y2}]`)
     }
-
     for(const item of notation.renderItems) {
       paintItem(this._context, item, style)
     }
@@ -249,23 +282,29 @@ export class Jianpu {
     if (index < 0 || index >= this._renderSheet.notations.length) return
 
     this._renderSheet.notations.splice(index, 1)
-    if (this._selectdIndex > this._renderSheet.notations.length - 1) this.selectNotation(this._renderSheet.notations.length - 1)
+    if (this._selectdIndex > this._renderSheet.notations.length - 1) {
+      this._selectdIndex = this._renderSheet.notations.length - 1
 
-    this.dispatch('NotationUpdated', { notation: cloneNotation(this._renderSheet.notations[index].notation), index })
+      this.dispatch('NotationSelected', { notation: cloneNotation(this._renderSheet.notations[this._selectdIndex].notation), index: this._selectdIndex })
+    } else {
+      this.dispatch('NotationUpdated', { notation: cloneNotation(this._renderSheet.notations[index].notation), index })
+    }
+
     this.render()
   }
   addNotation(notation: Notation, index?: number) {
     const append = cloneNotation(notation)
     const rendered = preRenderNotation(append)
 
-    if (typeof index === 'number' && index >= 0) {
-      this._renderSheet.notations.splice(index, 0, rendered)
-      this.selectNotation(index + 1)
+    if (typeof index === 'number' && index >= 0 && index < this.notationCount - 1) {
+      this._renderSheet.notations.splice(index + 1, 0, rendered)
+      this._selectdIndex = index + 1
     } else {
       this._renderSheet.notations.push(rendered)
-      this.selectNotation(this._renderSheet.notations.length - 1)
+      this._selectdIndex = this.notationCount - 1
     }
 
+    this.dispatch('NotationSelected', { notation, index: this._selectdIndex })
     this.render()
   }
 

@@ -82,6 +82,18 @@ const typeChange = (value: number) => {
     }
   }
 }
+const addOrnament = () => {
+  if (!notation) return
+  if (notation.type !== NotationType.Note) return
+
+  notation.ornaments = [...notation.ornaments, { base: 1, octave: 0, accidental: 0 }]
+}
+const removeOrnament = () => {
+  if (!notation) return
+  if (notation.type !== NotationType.Note) return
+
+  if (notation.ornaments.length > 0) notation.ornaments = notation.ornaments.slice(0, -1)
+}
 
 const octaves = [-3, -2, -1, 0, +1, +2, +3]
 const accidentals = [-2, -1, 0, +1, +2]
@@ -99,9 +111,6 @@ onMount(() => {
 </script>
 
 <div class="notation-panel">
-  <div>
-    <button type="button" on:click={() => addNotation()}>添加</button>
-  </div>
   {#if notation}
   <div class="notation">
     <label class="text-field">
@@ -162,6 +171,45 @@ onMount(() => {
         <input type="checkbox" bind:checked={notation.dot}>
         <span class="space"></span>
       </label>
+      <label class="text-field">
+        <span>装饰音：</span>
+        <button type="button" style="margin-right: 0.5rem;" on:click={addOrnament}>+</button>
+        <button type="button" on:click={removeOrnament}>-</button>
+      </label>
+      {#if notation.ornaments.length > 0}
+      <div class="list" style="margin-top: 1rem;">
+        <div>
+          <div class="inline-field-header"><span>唱名</span></div>
+          <div class="inline-field-header"><span>八度</span></div>
+          <div class="inline-field-header"><span>升降</span></div>
+        </div>
+        {#each notation.ornaments as pitch}
+          <div>
+            <div class="inline-field">
+              <select bind:value={pitch.base}>
+                {#each pitches as v}
+                  <option value={v}>{v}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="inline-field">
+              <select bind:value={pitch.octave}>
+                {#each octaves as v}
+                  <option value={v}>{v}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="inline-field">
+              <select bind:value={pitch.accidental}>
+                {#each accidentals as v, i}
+                  <option value={v}>{accidentalsText[i]}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+        {/each}
+      </div>
+      {/if}
     {:else if notation.type === NotationType.Tuplet}
       <label class="text-field">
         <span>N连音：</span>
@@ -211,8 +259,10 @@ onMount(() => {
     {/if}
   </div>
   <div class="footer">
-    <button type="button" on:click={() => saveNotation()}>保存</button>
+    <button type="button" on:click={() => saveNotation()}>应用</button>
   </div>
+  {:else}
+    <p>未选中音符</p>
   {/if}
 </div>
 
@@ -222,7 +272,8 @@ onMount(() => {
   padding: 1rem;
   border-radius: 1rem;
   box-shadow: 1px 1px 2px 2px #cecece;
-  height: 550px;
+  max-height: 550px;
+  overflow-y: auto;
 }
 .text-field {
   display: flex;

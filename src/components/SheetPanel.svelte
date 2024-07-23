@@ -132,7 +132,7 @@
       <input type="file" accept=".json" bind:this={file_importer} on:change={(ev) => importJson(ev.currentTarget.files?.[0])} style="display: none;">
       <button type="button" on:click={() => file_importer.click()}>导入</button>
       <button type="button" on:click={() => exportJson()}>导出</button>
-      <button type="button" on:click={() => saveInfo()}>保存</button>
+      <button type="button" on:click={() => saveInfo()}>应用</button>
     </div>
   </div>
   {:else}
@@ -155,7 +155,7 @@
               </select>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveMode(mode, i)}>保存</button>
+              <button type="button" on:click={() => saveMode(mode, i)}>应用</button>
             </div>
           </div>
         {/each}
@@ -177,7 +177,7 @@
               <input type="number" bind:value={beat.denominator}>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveBeat(beat, i)}>保存</button>
+              <button type="button" on:click={() => saveBeat(beat, i)}>应用</button>
             </div>
           </div>
         {/each}
@@ -198,7 +198,7 @@
               <input type="number" bind:value={bpm.bpm}>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveBpm(bpm, i)}>保存</button>
+              <button type="button" on:click={() => saveBpm(bpm, i)}>应用</button>
             </div>
           </div>
         {/each}

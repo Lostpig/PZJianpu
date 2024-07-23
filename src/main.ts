@@ -8,7 +8,7 @@ const canvas = document.getElementById('sheet-canvas') as HTMLCanvasElement
 const jianpuInstance = new Jianpu()
 jianpuInstance.binding(canvas)
 // DEBUG
-jianpuInstance.DEBUG = true
+// jianpuInstance.DEBUG = true
 
 bindingKeyboardHandlers(jianpuInstance)
 

@@ -16,23 +16,89 @@
     jianpu.setOptions(options)
     jianpu.updateInfo(sheet.info)
   }
-  const saveMode = (mode: Mode, index: number) => {
+
+  const saveMode = (mode: Mode) => {
     try {
-      jianpu.updateMode(mode, index)
+      jianpu.updateMode(mode.notation, mode.value)
     } catch (err) {
       alert((err as Error).message)
     }
   }
-  const saveBeat = (beat: Beat, index: number) => {
+  const addMode = () => {
+    if (jianpu.selectedIndex < 0) {
+      alert('请先选中一个音符')
+      return
+    }
+
     try {
-      jianpu.updateBeat(beat, index)
+      jianpu.addMode(jianpu.selectedIndex, 0)
+      sheet.modes = [...sheet.modes, { notation: jianpu.selectedIndex, value: 0 }]
     } catch (err) {
       alert((err as Error).message)
     }
   }
-  const saveBpm = (bpm: Bpm, index: number) => {
+  const deleteMode = (mode: Mode, index: number) => {
     try {
-      jianpu.updateBpm(bpm, index)
+      jianpu.deleteMode(mode.notation)
+      sheet.modes = [...sheet.modes.slice(0, index), ...sheet.modes.slice(index + 1)]
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+
+  const saveBeat = (beat: Beat) => {
+    try {
+      jianpu.updateBeat(beat.notation, beat.denominator, beat.numerator)
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+  const addBeat = () => {
+    if (jianpu.selectedIndex < 0) {
+      alert('请先选中一个音符')
+      return
+    }
+
+    try {
+      jianpu.addBeat(jianpu.selectedIndex, 4, 4)
+      sheet.beats = [...sheet.beats, { notation: jianpu.selectedIndex, denominator: 4, numerator: 4 }]
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+  const deleteBeat = (beat: Beat, index: number) => {
+    try {
+      jianpu.deleteBeat(beat.notation)
+      sheet.beats = [...sheet.beats.slice(0, index), ...sheet.beats.slice(index + 1)]
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+
+  const saveBpm = (bpm: Bpm) => {
+    try {
+      jianpu.updateBpm(bpm.notation, bpm.bpm)
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+  const addBpm = () => {
+    if (jianpu.selectedIndex < 0) {
+      alert('请先选中一个音符')
+      return
+    }
+
+    try {
+      jianpu.addBpm(jianpu.selectedIndex, 72)
+      sheet.bpms = [...sheet.bpms, { notation: jianpu.selectedIndex, bpm: 72 }]
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+  const deleteBpm = (bpm: Bpm, index: number) => {
+    try {
+      jianpu.deleteBpm(bpm.notation)
+      sheet.bpms = [...sheet.bpms.slice(0, index), ...sheet.bpms.slice(index + 1)]
     } catch (err) {
       alert((err as Error).message)
     }
@@ -132,19 +198,24 @@
       <input type="file" accept=".json" bind:this={file_importer} on:change={(ev) => importJson(ev.currentTarget.files?.[0])} style="display: none;">
       <button type="button" on:click={() => file_importer.click()}>导入</button>
       <button type="button" on:click={() => exportJson()}>导出</button>
+      <div class="space"></div>
       <button type="button" on:click={() => saveInfo()}>应用</button>
     </div>
   </div>
   {:else}
   <div class="settings">
     <div>
-      <span class="caption">调号</span>
+      <div>
+        <span class="caption">调号</span>
+        <button type="button" on:click={() => addMode()}>+</button>
+      </div>
+
       <div class="list">
         {#each sheet.modes as mode, i }
           <div>
             <div class="inline-field">
               <span>位置：</span>
-              <input type="number" bind:value={mode.notation}>
+              <input type="number" readonly value={mode.notation}>
             </div>
             <div class="inline-field">
               <span>1 = </span>
@@ -155,7 +226,8 @@
               </select>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveMode(mode, i)}>应用</button>
+              <button type="button" on:click={() => saveMode(mode)}>应用</button>
+              <button type="button" class="red" on:click={() => deleteMode(mode, i)}>-</button>
             </div>
           </div>
         {/each}
@@ -163,13 +235,16 @@
     </div>
 
     <div>
-      <span class="caption">拍号</span>
+      <div>
+        <span class="caption">拍号</span>
+        <button type="button" on:click={() => addBeat()}>+</button>
+      </div>
       <div class="list">
         {#each sheet.beats as beat, i}
           <div>
             <div class="inline-field">
               <span>位置：</span>
-              <input type="number" bind:value={beat.notation}>
+              <input type="number" readonly value={beat.notation}>
             </div>
             <div class="inline-field beat">
               <input type="number" bind:value={beat.numerator}>
@@ -177,7 +252,8 @@
               <input type="number" bind:value={beat.denominator}>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveBeat(beat, i)}>应用</button>
+              <button type="button" on:click={() => saveBeat(beat)}>应用</button>
+              <button type="button" class="red" on:click={() => deleteBeat(beat, i)}>-</button>
             </div>
           </div>
         {/each}
@@ -185,20 +261,24 @@
     </div>
 
     <div>
-      <span class="caption">曲速</span>
+      <div>
+        <span class="caption">速度</span>
+        <button type="button" on:click={() => addBpm()}>+</button>
+      </div>
       <div class="list">
         {#each sheet.bpms as bpm, i}
           <div>
             <div class="inline-field">
               <span>位置：</span>
-              <input type="number" bind:value={bpm.notation}>
+              <input type="number" readonly value={bpm.notation}>
             </div>
             <div class="inline-field">
-              <span>bpm = </span>
+              <span>𝅘𝅥 = </span>
               <input type="number" bind:value={bpm.bpm}>
             </div>
             <div class="operate">
-              <button type="button" on:click={() => saveBpm(bpm, i)}>应用</button>
+              <button type="button" on:click={() => saveBpm(bpm)}>应用</button>
+              <button type="button" class="red" on:click={() => deleteBpm(bpm, i)}>-</button>
             </div>
           </div>
         {/each}
@@ -212,11 +292,11 @@
 .info-panel {
   padding: 1rem;
   border-radius: 1rem;
-  box-shadow: 1px 1px 2px 2px #cecece;
+  box-shadow: var(--panel-shadow);
 }
 .tabs {
   display: flex;
-  border: 1px solid #999999;
+  border: var(--custom-border);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -227,8 +307,8 @@
   text-align: center;
 }
 .tabs > div.active {
-  color: #fff;
-  background-color: #3471f9;
+  color: var(--white);
+  background-color: var(--active-blue);
 }
 
 .info, .settings {
@@ -242,20 +322,28 @@
   align-items: center;
 }
 .text-field > span {
-  width: 8rem;
+  width: 6rem;
   text-align: right;
 }
 .text-field > input {
   flex: 1;
   height: 2rem;
-  border: 1px solid #cecece;
+  border: var(--custom-border);
   border-radius: 0.5rem;
   margin-left: 0.5rem;
   padding: 0 0.5rem;
 }
 .footer {
-  margin-top: 1rem;
-  text-align: right;
+  display: flex;
+  margin-top: 0.5rem;
+  border-top: var(--custom-border);
+  padding-top: 1rem;
+}
+.footer button {
+  margin-right: 0.5rem;
+}
+.space {
+  flex: 1;
 }
 
 .settings > div {
@@ -265,14 +353,15 @@
   font-size: 1.25rem;
 }
 .list {
-  border-bottom: 1px solid #cecece;
+  margin-top: 0.5rem;
+  border-bottom: var(--custom-border);
 }
 .list > div {
   display: flex;
   align-items: center;
   padding: 0.5rem 1rem;
   border-style: solid;
-  border-color: #cecece;
+  border-color: var(--border-color);
   border-width: 1px 1px 0 1px;
 }
 .inline-field {
@@ -282,11 +371,11 @@
 .inline-field > input,
 .inline-field > select {
   height: 2rem;
-  border: 1px solid #cecece;
+  border: var(--custom-border);
   border-radius: 0.5rem;
   margin-left: 0.5rem;
   padding: 0 0.5rem;
-  width: 4rem;
+  width: 3rem;
 }
 .inline-field.beat > input {
   width: 2rem;

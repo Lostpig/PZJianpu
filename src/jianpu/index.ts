@@ -1,11 +1,12 @@
-import type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, SheetStyle } from './declare'
+import type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, SheetStyle, ModeValue } from './declare'
 import { NotationType, ModeText } from './declare'
-import type { RenderSheet } from './render'
+import type { RenderSheet, RenderError } from './render'
 import { preRenderSheet, render, paint, paintItem, preRenderNotation, eraseNotation } from './render'
 
 interface JianpuEvents {
   'NotationSelected': { notation?: Notation, index: number }
   'NotationUpdated': { notation: Notation, index: number }
+  'Rendered': { errors: RenderError[] }
 }
 export type JianpuEventName = keyof JianpuEvents
 export type JianpuEvent<T extends JianpuEventName> = JianpuEvents[T]
@@ -38,6 +39,13 @@ const cloneNotation = (notation: Notation): Notation => {
   }
 
   return notation
+}
+const mapValuesToArray = <T>(map: Map<unknown, T>) => {
+  const result: T[] = []
+  for (const [k, v] of map) {
+    result.push({ ...v })
+  }
+  return result
 }
 
 export class Jianpu {
@@ -112,9 +120,9 @@ export class Jianpu {
     const sheet: Sheet = {
       info: { ...this._renderSheet.info },
       repeats: this._renderSheet.repeats.map(x => ({ ...x })),
-      modes: this._renderSheet.modes.map(x => ({ ...x })),
-      bpms: this._renderSheet.bpms.map(x => ({ ...x })),
-      beats: this._renderSheet.beats.map(x => ({ ...x })),
+      modes: mapValuesToArray(this._renderSheet.modes),
+      bpms: mapValuesToArray(this._renderSheet.bpms),
+      beats: mapValuesToArray(this._renderSheet.beats),
       notations: this._renderSheet.notations.map(n => cloneNotation(n.notation)),
     }
     return sheet
@@ -222,6 +230,8 @@ export class Jianpu {
 
     paint(this._context, result, this._options.style)
     if (this._selectdIndex >= 0) this.paintNotation(this._selectdIndex)
+
+    this.dispatch('Rendered', { errors: result.errors })
   }
   paintNotation (index: number) {
     if (!this._context) return
@@ -308,92 +318,93 @@ export class Jianpu {
     this.render()
   }
 
-  updateMode(mode: Mode, index: number) {
-    if (index === 0 && mode.notation !== 0) {
-      throw new Error('The first mode anchored index must be 0')
+  updateMode(index: number, value: ModeValue) {
+    if (!this._renderSheet.modes.has(index)) {
+      throw new Error(`音符位置${index}的调号不存在`)
     }
 
-    const clone = { ...mode }
-    this._renderSheet.modes[index] = clone
-
+    this._renderSheet.modes.get(index)!.value = value
     this.render()
   }
   deleteMode(index: number) {
     if (index === 0) {
-      throw new Error('Cannot delete the first mode')
+      throw new Error('无法删除谱面首个调号')
     }
 
-    this._renderSheet.modes.splice(index, 1)
+    if (this._renderSheet.modes.delete(index)) this.render()
   }
-  addMode(mode: Mode, index?: number) {
-    const clone = { ...mode }
-
-    if (typeof index === 'number' && index >= 0) {
-      this._renderSheet.modes.splice(index, 0, clone)
-    } else {
-      this._renderSheet.modes.push(clone)
+  addMode(index: number, value: ModeValue) {
+    if (this._renderSheet.modes.has(index)) {
+      throw new Error('当前音符位置已存在调号信息')
     }
+    const mode: Mode = {
+      notation: index,
+      value
+    }
+    this._renderSheet.modes.set(index, mode)
 
     this.render()
   }
 
-  updateBeat(beat: Beat, index: number) {
-    if (index === 0 && beat.notation !== 0) {
-      throw new Error('The first beat anchored index must be 0')
+  updateBeat(index: number, denominator: number, numerator: number) {
+    if (!this._renderSheet.beats.has(index)) {
+      throw new Error(`音符位置${index}的拍号不存在`)
     }
 
-    const clone = { ...beat }
-    this._renderSheet.beats[index] = clone
-
+    const beat = this._renderSheet.beats.get(index)!
+    beat.denominator = denominator
+    beat.numerator = numerator
     this.render()
   }
   deleteBeat(index: number) {
     if (index === 0) {
-      throw new Error('Cannot delete the first beat')
+      throw new Error('无法删除谱面首个拍号')
     }
 
-    this._renderSheet.beats.splice(index, 1)
+    if (this._renderSheet.beats.delete(index)) this.render()
   }
-  addBeat(beat: Beat, index?: number) {
-    const clone = { ...beat }
-
-    if (typeof index === 'number' && index >= 0) {
-      this._renderSheet.beats.splice(index, 0, clone)
-    } else {
-      this._renderSheet.beats.push(clone)
+  addBeat(index: number, denominator: number, numerator: number) {
+    if (this._renderSheet.beats.has(index)) {
+      throw new Error('当前音符位置已存在拍号信息')
     }
+    const beat: Beat = {
+      notation: index,
+      denominator,
+      numerator
+    }
+    this._renderSheet.beats.set(index, beat)
 
     this.render()
   }
 
-  updateBpm(bpm: Bpm, index: number) {
-    if (index === 0 && bpm.notation !== 0) {
-      throw new Error('The first bpm anchored index must be 0')
+  updateBpm(index: number, bpm: number) {
+    if (!this._renderSheet.bpms.has(index)) {
+      throw new Error(`音符位置${index}的速度记号不存在`)
     }
 
-    const clone = { ...bpm }
-    this._renderSheet.bpms[index] = clone
-
+    this._renderSheet.bpms.get(index)!.bpm = bpm
     this.render()
   }
   deleteBpm(index: number) {
     if (index === 0) {
-      throw new Error('Cannot delete the first bpm')
+      throw new Error('无法删除谱面首个速度记号')
     }
 
-    this._renderSheet.bpms.splice(index, 1)
+    if (this._renderSheet.bpms.delete(index)) this.render()
   }
-  addBpm(bpm: Bpm, index?: number) {
-    const clone = { ...bpm }
-
-    if (typeof index === 'number' && index >= 0) {
-      this._renderSheet.bpms.splice(index, 0, clone)
-    } else {
-      this._renderSheet.bpms.push(clone)
+  addBpm(index: number, bpm: number) {
+    if (this._renderSheet.bpms.has(index)) {
+      throw new Error('当前音符位置已存在速度记号')
     }
+
+    const newBpm: Bpm = {
+      notation: index,
+      bpm
+    }
+    this._renderSheet.bpms.set(index, newBpm)
 
     this.render()
   }
 }
 export { ModeText, NotationType }
-export type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet }
+export type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, RenderError }

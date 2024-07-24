@@ -16,7 +16,6 @@ const onNotationUpdated = (instance: Jianpu, ev: JianpuEvent<'NotationUpdated'>)
   }
 }
 
-
 const saveNotation = () => {
   if (!notation) return
   jianpu.updateNotation(notation, index)
@@ -29,7 +28,10 @@ const addNotation = () => {
     slur: 0,
     dot: false,
     ornaments: []
-  }, -1)
+  }, jianpu.selectedIndex)
+}
+const removeNotation = () => {
+  jianpu.deleteNotation(index)
 }
 
 const tupletCountChange = (value: number) => {
@@ -174,7 +176,7 @@ onMount(() => {
       <label class="text-field">
         <span>装饰音：</span>
         <button type="button" style="margin-right: 0.5rem;" on:click={addOrnament}>+</button>
-        <button type="button" on:click={removeOrnament}>-</button>
+        <button type="button" class="red" on:click={removeOrnament}>-</button>
       </label>
       {#if notation.ornaments.length > 0}
       <div class="list" style="margin-top: 1rem;">
@@ -259,10 +261,14 @@ onMount(() => {
     {/if}
   </div>
   <div class="footer">
+    <button type="button" class="gray" on:click={() => addNotation()}>插入音符</button>
+    <button type="button" class="red" on:click={() => removeNotation()}>删除音符</button>
+    <div class="space"></div>
     <button type="button" on:click={() => saveNotation()}>应用</button>
   </div>
   {:else}
     <p>未选中音符</p>
+    <button type="button" class="gray" on:click={() => addNotation()}>插入新音符</button>
   {/if}
 </div>
 
@@ -271,7 +277,7 @@ onMount(() => {
   margin-top: 2rem;
   padding: 1rem;
   border-radius: 1rem;
-  box-shadow: 1px 1px 2px 2px #cecece;
+  box-shadow: var(--panel-shadow);
   max-height: 550px;
   overflow-y: auto;
 }
@@ -282,14 +288,14 @@ onMount(() => {
   height: 2rem;
 }
 .text-field > span {
-  width: 8rem;
+  width: 6rem;
   text-align: right;
 }
 .text-field > input,
 .text-field > select {
   flex: 1;
   height: 100%;
-  border: 1px solid #cecece;
+  border: var(--custom-border);
   border-radius: 0.5rem;
   margin-left: 0.5rem;
   padding: 0 0.5rem;
@@ -305,14 +311,14 @@ onMount(() => {
 
 .list {
   margin-left: 8.5rem;
-  border-bottom: 1px solid #cecece;
+  border-bottom: var(--custom-border);
 }
 .list > div {
   display: flex;
   align-items: center;
   padding: 0.5rem 1rem;
   border-style: solid;
-  border-color: #cecece;
+  border-color: var(--border-color);
   border-width: 1px 1px 0 1px;
 }
 .inline-field {
@@ -322,7 +328,7 @@ onMount(() => {
 }
 .inline-field > select {
   height: 2rem;
-  border: 1px solid #cecece;
+  border: var(--custom-border);
   border-radius: 0.5rem;
   padding: 0 0.5rem;
   width: 100%;
@@ -335,7 +341,15 @@ onMount(() => {
 }
 
 .footer {
+  display: flex;
+  margin-top: 0.5rem;
+  border-top: var(--custom-border);
   padding-top: 1rem;
-  text-align: right;
+}
+.footer button {
+  margin-right: 0.5rem;
+}
+.space {
+  flex: 1;
 }
 </style>

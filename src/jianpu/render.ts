@@ -1,4 +1,4 @@
-import type { Sheet, Mode, Beat, Bpm, Notation, Note, Pitch, Rest, Tuplet, Options, Info, SheetStyle  } from './declare'
+import type { Sheet, Mode, Beat, Bpm, Notation, Note, Pitch, Rest, Tuplet, Options, Info, SheetStyle, Repeat } from './declare'
 import { NotationType, ModeText } from './declare'
 
 type RenderType = 'text' | 'beat' | 'line' | 'dot' | 'curve' | 'arc' | 'clear'
@@ -63,7 +63,12 @@ export interface RenderNotation<T = Notation> {
   x2: number
   y2: number
 }
-export interface RenderSheet extends Omit<Sheet, 'notations'> {
+export interface RenderSheet {
+  info: Info
+  repeats: Repeat[]   // TODO
+  bpms: Map<number, Bpm>
+  beats: Map<number, Beat>
+  modes: Map<number, Mode>
   notations: RenderNotation[]
 }
 export interface RenderResult {
@@ -93,9 +98,6 @@ interface RenderState {
   slurBegin?: [number, number]
   sectionIndex: number
   notationIndex: number
-  modeIndex: number
-  bpmIndex: number
-  beatIndex: number
   items: RenderItem[]
   errors: RenderError[]
 }
@@ -104,6 +106,13 @@ interface SectionState {
   underlines: LineItem[]
 }
 
+const arrayToMap = <T extends { notation: number }>(arr: T[]) => {
+  const map = new Map<number, T>()
+  for (const n of arr) {
+    map.set(n.notation, n)
+  }
+  return map
+}
 export const preRenderNotation = (notation: Notation)  => {
   const renderNotation: RenderNotation = {
     notation,
@@ -124,9 +133,9 @@ export const preRenderSheet = (sheet: Sheet) => {
       artist: sheet.info.artist.trim(),
       copyright: sheet.info.copyright.trim(),
     },
-    modes: sheet.modes.sort((a,b) => a.notation - b.notation),
-    beats: sheet.beats.sort((a,b) => a.notation - b.notation),
-    bpms: sheet.bpms.sort((a,b) => a.notation - b.notation),
+    modes: arrayToMap(sheet.modes),
+    beats: arrayToMap(sheet.beats),
+    bpms: arrayToMap(sheet.bpms),
     repeats: sheet.repeats
   }
   return renderSheet
@@ -137,11 +146,11 @@ const renderLog = (message: string, state: RenderState) => {
 }
 const checkSheet = (sheet: RenderSheet)  => {
   const result: { success: boolean, messages: string[] } = { success: true, messages: [] }
-  if (sheet.modes.length === 0 || sheet.modes[0].notation !== 0) {
+  if (!sheet.modes.has(0)) {
     result.success = false
     result.messages.push('调号信息不存在，或首个调号不在谱的开头处')
   }
-  if (sheet.beats.length === 0 || sheet.beats[0].notation !== 0) {
+  if (!sheet.beats.has(0)) {
     result.success = false
     result.messages.push('拍号信息不存在，或首个拍号不在谱的开头处')
   }
@@ -149,6 +158,8 @@ const checkSheet = (sheet: RenderSheet)  => {
   return result
 }
 export const render = (sheet: RenderSheet, options: Options): RenderResult => {
+  const firstBeat = sheet.beats.get(0)!
+
   const context: RenderContext = {
     width: options.width,
     usableWidth: options.width - options.paddingX * 2,
@@ -160,17 +171,14 @@ export const render = (sheet: RenderSheet, options: Options): RenderResult => {
     linePadding: options.linePadding,
     lineWidth: Math.ceil(options.fontsize * 0.05),
     dotSize: Math.ceil(options.fontsize * 0.08),
-    sectionTime: (1024 / sheet.beats[0].denominator) * sheet.beats[0].numerator,
-    beatTime: 1024 / sheet.beats[0].denominator
+    sectionTime: (1024 / firstBeat.denominator) * firstBeat.numerator,
+    beatTime: 1024 / firstBeat.denominator
   }
   const state: RenderState = {
     x: context.paddingX,
     y: context.paddingY,
     sectionIndex: 0,
     notationIndex: 0,
-    modeIndex: 0,
-    bpmIndex: 0,
-    beatIndex: 0,
     items: [],
     errors: []
   }
@@ -214,23 +222,29 @@ export const renderSheet = (sheet: RenderSheet, context: RenderContext, state: R
     let sectionState: SectionState = { pitches: [], underlines: [] }
 
     const endIndex = rowContext.startIndex + rowContext.count
+    state.y += rowContext.yMargin * context.lineHeight
+
     for (; state.notationIndex < endIndex; state.notationIndex++) {
       const item = sheet.notations[state.notationIndex]
 
       let modeRendered = false
-      if (modes[state.modeIndex] && modes[state.modeIndex]?.notation === state.notationIndex) {
-        renderMode(context, state, modes[state.modeIndex])
+      if (modes.has(state.notationIndex)) {
+        renderMode(context, state, rowContext, modes.get(state.notationIndex)!)
         modeRendered = true
       }
-      if (beats[state.beatIndex] && beats[state.beatIndex]?.notation === state.notationIndex) {
-        if (!sectionStartFlag) renderLog('拍号变更必须在小节的起始处!', state)
-        // 拍号变化了要同时更改小节时值
-        context.sectionTime = (1024 / beats[state.beatIndex].denominator) * beats[state.beatIndex].numerator
-        context.beatTime = 1024 / beats[state.beatIndex].denominator
-        renderBeat(context, state, beats[state.beatIndex], modeRendered)
+      if (beats.has(state.notationIndex)) {
+        if (!sectionStartFlag) {
+          renderLog('拍号无效，拍号必须在小节的起始处!', state)
+        } else {
+          // 拍号变化了要同时更改小节时值
+          const beat = beats.get(state.notationIndex)!
+          context.sectionTime = (1024 / beat.denominator) * beat.numerator
+          context.beatTime = 1024 / beat.denominator
+          renderBeat(context, state, rowContext, beat, modeRendered)
+        }
       }
-      if (bpms[state.bpmIndex] && bpms[state.bpmIndex]?.notation === state.notationIndex) {
-        renderBpm(context, state, bpms[state.bpmIndex])
+      if (bpms.has(state.notationIndex)) {
+        renderBpm(context, state, bpms.get(state.notationIndex)!)
       }
 
       const time = renderNotation(context, state, rowContext, sectionState, item)
@@ -294,6 +308,7 @@ interface RowContext {
   readonly usedWidth: number
   readonly xPositions: number[]
   readonly margin: number
+  readonly yMargin: number
 }
 const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: RenderState): RowContext => {
   let usedWidth = 0
@@ -301,6 +316,7 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
   let sectionCount = 0
   let timer = 0
   let notationCount = 0
+  let yMargin = 0
   const xPositions: number[] = []
 
   let rowContext: RowContext = {
@@ -309,12 +325,20 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
     count: 0,
     usedWidth: 0,
     margin: 0,
-    xPositions: []
+    xPositions: [],
+    yMargin: 0
   }
 
   for(let i = state.notationIndex; i < sheet.notations.length; i++) {
     const notation = sheet.notations[i].notation
     let time = 1024 / notation.time
+
+    if (sheet.beats.has(i) || sheet.modes.has(i)) {
+      if (sheet.bpms.has(i)) yMargin = Math.max(yMargin, 2)
+      else yMargin = Math.max(yMargin, 1)
+    } else if (sheet.bpms.has(i)) {
+      yMargin = Math.max(yMargin, 1)
+    }
 
     notationCount++
     xPositions.push(usedWidth)
@@ -365,7 +389,8 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
         sectionCount: sectionCount,
         usedWidth: usedWidth,
         margin,
-        xPositions: [...xPositions]
+        xPositions: [...xPositions],
+        yMargin
       }
 
       itemsCount += 1
@@ -380,42 +405,32 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Render
     sectionCount,
     usedWidth,
     margin: 0,
-    xPositions
+    xPositions,
+    yMargin
   }
   return rowContext
 }
 
-const renderMode = (ctx: RenderContext, state: RenderState, mode: Mode) => {
+const renderMode = (ctx: RenderContext, state: RenderState, rowContext: RowContext, mode: Mode) => {
   const text = '1 = ' + ModeText[mode.value]
 
-  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: state.y, size: ctx.fontSize * 0.75 }
+  const y = rowContext.yMargin === 1 ? state.y - ctx.lineHeight : state.y - ctx.lineHeight * 2
+  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: y, size: ctx.fontSize * 0.75 }
   state.items.push(item)
-  state.y += ctx.lineHeight
-  state.modeIndex++
 }
-const renderBeat = (ctx: RenderContext, state: RenderState, beat: Beat, afterMode: boolean) => {
-  let x = 0
-  let y = 0
-  if (afterMode) { // 当前小节已有调号信息则渲染在调号后面
-    x = state.x + ctx.fontSize * 3
-    y = state.y - ctx.lineHeight
-  }
-  else {
-    x = state.x
-    y = state.y
-    state.y += ctx.lineHeight
-  }
+const renderBeat = (ctx: RenderContext, state: RenderState, rowContext: RowContext, beat: Beat, afterMode: boolean) => {
+  const x = state.x + (afterMode ?  ctx.fontSize * 3 : 0)
+  const y = rowContext.yMargin === 1 ? state.y - ctx.lineHeight : state.y - ctx.lineHeight * 2
 
   const item: BeatItem = { type: 'beat', x, y, numerator: beat.numerator + '', denominator: beat.denominator + '', fontSize: ctx.fontSize * 0.75, lineWidth: ctx.lineWidth }
   state.items.push(item)
-  state.beatIndex++
 }
 const renderBpm = (ctx: RenderContext, state: RenderState, bpm: Bpm) => {
   const text = '𝅘𝅥 = ' + bpm.bpm
-  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: state.y, size: ctx.fontSize * 0.75 }
+
+  const y = state.y - ctx.lineHeight
+  const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y, size: ctx.fontSize * 0.75 }
   state.items.push(item)
-  state.y += ctx.lineHeight
-  state.bpmIndex++
 }
 
 const renderNotation = (ctx: RenderContext, state: RenderState, rowContext: RowContext, sectionState: SectionState, item: RenderNotation) => {
@@ -809,10 +824,11 @@ const paintText = (ctx: CanvasRenderingContext2D, item: TextItem, style: SheetSt
 const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem, style: SheetStyle) => {
   ctx.font = `${item.fontSize}px ${style.font}`
   ctx.textBaseline = 'top'
+  ctx.textAlign = 'center'
   ctx.fillStyle = style.fillColor
   ctx.strokeStyle = style.fillColor
 
-  ctx.fillText(item.numerator, item.x, item.y - item.fontSize * 0.6)
+  ctx.fillText(item.numerator, item.x + item.fontSize * 0.25, item.y - item.fontSize * 0.6)
 
   ctx.beginPath()
   ctx.moveTo(item.x - item.fontSize * 0.25, item.y + item.fontSize * 0.5)
@@ -820,7 +836,7 @@ const paintBeat = (ctx: CanvasRenderingContext2D, item: BeatItem, style: SheetSt
   ctx.lineWidth = item.lineWidth
   ctx.stroke()
 
-  ctx.fillText(item.denominator, item.x, item.y + item.fontSize * 0.6)
+  ctx.fillText(item.denominator, item.x + item.fontSize * 0.25, item.y + item.fontSize * 0.6)
 }
 const paintLine = (ctx: CanvasRenderingContext2D, item: LineItem, style: SheetStyle) => {
   ctx.strokeStyle = style.fillColor

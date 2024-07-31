@@ -1,12 +1,12 @@
 import type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, SheetStyle, ModeValue } from './declare'
 import { NotationType, ModeText } from './declare'
-import type { RenderSheet, RenderError } from './render'
+import type { RenderSheet, RenderLog } from './render'
 import { preRenderSheet, render, paint, paintItem, preRenderNotation, eraseNotation } from './render'
 
 interface JianpuEvents {
   'NotationSelected': { notation?: Notation, index: number }
   'NotationUpdated': { notation: Notation, index: number }
-  'Rendered': { errors: RenderError[] }
+  'Rendered': { logs: RenderLog[] }
 }
 export type JianpuEventName = keyof JianpuEvents
 export type JianpuEvent<T extends JianpuEventName> = JianpuEvents[T]
@@ -69,10 +69,10 @@ export class Jianpu {
       beats: [{ notation: 0, numerator: 4, denominator: 4 }],
       bpms: [{ notation: 0, bpm: 72 }],
       notations: [
-        { type: NotationType.Rest, time: 4 },
-        { type: NotationType.Rest, time: 4 },
-        { type: NotationType.Rest, time: 4 },
-        { type: NotationType.Rest, time: 4 }
+        { type: NotationType.Rest, time: 4, dot: false },
+        { type: NotationType.Rest, time: 4, dot: false },
+        { type: NotationType.Rest, time: 4, dot: false },
+        { type: NotationType.Rest, time: 4, dot: false }
       ]
     }
   }
@@ -223,15 +223,15 @@ export class Jianpu {
         result.width - this._options.paddingX * 2, 
         result.height - this._options.paddingY * 2)
       
-      if (result.errors.length > 0) {
-        result.errors.forEach(err => console.log(`${err.index}: ${err.message}`))
+      if (result.logs.length > 0) {
+        result.logs.forEach(err => console.log(`${err.index}: ${err.message}`))
       }
     }
 
     paint(this._context, result, this._options.style)
     if (this._selectdIndex >= 0) this.paintNotation(this._selectdIndex)
 
-    this.dispatch('Rendered', { errors: result.errors })
+    this.dispatch('Rendered', { logs: result.logs })
   }
   paintNotation (index: number) {
     if (!this._context) return
@@ -407,4 +407,4 @@ export class Jianpu {
   }
 }
 export { ModeText, NotationType }
-export type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, RenderError }
+export type { Sheet, Options, Notation, Mode, Beat, Bpm, Info, Note, Rest, Tuplet, RenderLog }

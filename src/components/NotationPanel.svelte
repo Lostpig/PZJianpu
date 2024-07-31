@@ -70,7 +70,8 @@ const typeChange = (value: number) => {
   } else if (value === NotationType.Rest) {
     notation = {
       type: NotationType.Rest,
-      time
+      time,
+      dot: false
     }
   } else if (value === NotationType.Tuplet) {
     notation = {
@@ -135,6 +136,13 @@ onMount(() => {
         {/each}
       </select>
     </label>
+    {#if notation.type === NotationType.Note || notation.type === NotationType.Rest}
+    <label class="text-field">
+      <span>附点：</span>
+      <input type="checkbox" bind:checked={notation.dot}>
+      <span class="space"></span>
+    </label>
+    {/if}
     {#if notation.type === NotationType.Note}
       <label class="text-field">
         <span>唱名：</span>
@@ -167,11 +175,6 @@ onMount(() => {
           <option value={1}>起始</option>
           <option value={2}>结束</option>
         </select>
-      </label>
-      <label class="text-field">
-        <span>附点：</span>
-        <input type="checkbox" bind:checked={notation.dot}>
-        <span class="space"></span>
       </label>
       <label class="text-field">
         <span>装饰音：</span>

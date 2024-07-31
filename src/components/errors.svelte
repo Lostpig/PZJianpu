@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
-  import type { RenderError } from '../jianpu/index'
+  import type { RenderLog } from '../jianpu/index'
 
   export let visible = false
-  export let errors: RenderError[] = []
+  export let errors: RenderLog[] = []
+  export let warnings: RenderLog[] = []
   
   const dispatcher = createEventDispatcher()
   const closeDialog = () => {
@@ -13,12 +14,18 @@
 
 <div class="dialog-container" class:visible={visible}>
   <div class="dialog errors-dialog">
-    <header>错误信息</header>
+    <header>错误/警号信息</header>
     <div class="content">
       {#each errors as err }
-      <div class="error-item">
+      <div class="log-item error">
         <div class="position">位置: {err.index}</div>
         <span class="message">{err.message}</span>
+      </div>
+      {/each}
+      {#each warnings as warn }
+      <div class="log-item warning">
+        <div class="position">位置: {warn.index}</div>
+        <span class="message">{warn.message}</span>
       </div>
       {/each}
     </div>
@@ -29,16 +36,22 @@
 </div>
 
 <style>
-  .error-item {
+  .log-item {
     padding: 0.5rem 0 0 0;
     display: flex;
   }
-  .error-item .message {
+  .log-item .message {
     flex: 1;
     color: var(--red);
   }
-  .error-item .position {
+  .log-item .position {
     width: 12rem;
+  }
+   .log-item.error .message {
+    color: var(--red);
+  }
+  .log-item.warning .message {
+    color: var(--orange);
   }
   .errors-dialog {
     min-width: 700px;

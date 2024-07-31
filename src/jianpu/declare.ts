@@ -66,6 +66,7 @@ export interface Note {
 export interface Rest {
   type: (typeof NotationType)['Rest']
   time: number          // 时值
+  dot: boolean          // 附点
 }
 export interface Tuplet {
   type: (typeof NotationType)['Tuplet']

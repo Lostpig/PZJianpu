@@ -23,6 +23,9 @@
   --active-red: #bb1d1d;
   --gray: #e4e9ea;
   --active-gray: #9fa5a6;
+  --orange: #e08d35;
+  --active-orange: #dc7200;
+  --dark-gray: #b1bbbb;
 }
 
 body {
@@ -82,6 +85,20 @@ button.gray {
 }
 button.gray:hover {
   background-color: var(--active-gray);
+}
+button.orange {
+  background-color: var(--orange);
+}
+button.orange:hover {
+background-color: var(--active-orange);
+}
+button.disable {
+  cursor: default;
+  color: var(--white);
+  background-color: var(--dark-gray);
+}
+button.disable:hover {
+  background-color: var(--dark-gray);
 }
 
 .dialog-container {

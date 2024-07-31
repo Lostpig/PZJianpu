@@ -4,21 +4,27 @@
   import Help from './components/help.svelte'
   import Errors from './components/errors.svelte'
 
-  import type { Jianpu, RenderError } from './jianpu/index'
+  import type { Jianpu, RenderLog } from './jianpu/index'
   import { getContext, onMount } from 'svelte'
   const jianpu = getContext<Jianpu>('jianpu')
 
-  let errors: RenderError[] = []
+  let errors: RenderLog[] = []
+  let warnings: RenderLog[] = []
+  let logCount = 0
+  let btnCls = 'disable'
   let helpVisible = false
-  let errorsVisible = false
+  let logsVisible = false
 
   const showError = () => {
-    if (errors.length === 0) return
-    errorsVisible = true
+    if (logCount === 0) return
+    logsVisible = true
   }
   onMount(() => {
     jianpu.listen('Rendered', (_, ev) => {
-      errors = ev.errors
+      errors = ev.logs.filter(n => n.type === 'error')
+      warnings = ev.logs.filter(n => n.type === 'warning')
+      logCount = ev.logs.length
+      btnCls = errors.length > 0 ? 'red' : (warnings.length > 0 ? 'orange' : 'disable')
     })
   })
 </script>
@@ -27,11 +33,11 @@
   <SheetPanel />
   <NotationPanel />
   <Help visible={helpVisible} on:close={() => helpVisible = false} />
-  <Errors visible={errorsVisible} errors={errors} on:close={() => errorsVisible = false} />
+  <Errors visible={logsVisible} errors={errors} warnings={warnings} on:close={() => logsVisible = false} />
 
   <div class="bottom">
     <button class="gray" on:click={() => helpVisible = true}>说明</button>
-    <button class="red" on:click={() => showError()}>错误({errors.length})</button>
+    <button class={btnCls} on:click={() => showError()}>消息({logCount})</button>
   </div>
 </main>
 

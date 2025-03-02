@@ -3,21 +3,27 @@ import App from './App.svelte'
 import { Jianpu } from './jianpu/index'
 import { bindingKeyboardHandlers } from './key-operation'
 
-const canvas = document.getElementById('sheet-canvas') as HTMLCanvasElement
 
-const jianpuInstance = new Jianpu()
-jianpuInstance.binding(canvas)
-// DEBUG
-// jianpuInstance.DEBUG = true
 
-bindingKeyboardHandlers(jianpuInstance)
+const boot = () => {
+  const canvas = document.getElementById('sheet-canvas') as HTMLCanvasElement
 
-const contextMap = new Map<string, any>()
-contextMap.set('jianpu', jianpuInstance)
+  const jianpuInstance = new Jianpu()
+  jianpuInstance.binding(canvas)
+  // DEBUG
+  // jianpuInstance.DEBUG = true
 
-const app = new App({
-  target: document.getElementById('app')!,
-  context: contextMap
-})
+  bindingKeyboardHandlers(jianpuInstance)
 
-export default app
+  const contextMap = new Map<string, any>()
+  contextMap.set('jianpu', jianpuInstance)
+
+  const app = new App({
+    target: document.getElementById('app')!,
+    context: contextMap
+  })
+}
+
+document.onreadystatechange = () => {
+  boot()
+}

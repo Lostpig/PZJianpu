@@ -70,7 +70,7 @@ const setNotation = (jianpu: Jianpu, num: number) => {
   if (!notation) return
   
   if (num === 0) {
-    jianpu.updateNotation({ type: NotationType.Rest, time: notation.time }, jianpu.selectedIndex)
+    jianpu.updateNotation({ type: NotationType.Rest, time: notation.time, dot: false }, jianpu.selectedIndex)
   } else {
     const newNote: Note = {
       ...defaultNote,

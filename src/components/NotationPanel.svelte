@@ -102,6 +102,7 @@ const octaves = [-3, -2, -1, 0, +1, +2, +3]
 const accidentals = [-2, -1, 0, +1, +2]
 const accidentalsText = ['𝄫', '♭', '无', '♯', '𝄪']
 const pitches = [1, 2, 3, 4, 5, 6, 7]
+const pitchesText = ['1 (Do)', '2 (Re)', '3 (Mi)', '4 (Fa)', '5 (Sol)', '6 (La)', '7 (Si)']
 const times = [1, 2, 4, 8, 16, 32, 64]
 const timesText = ['全音符', '二分音符', '四分音符', '八分音符', '16分音符', '32分音符', '64分音符']
 onMount(() => {
@@ -147,8 +148,8 @@ onMount(() => {
       <label class="text-field">
         <span>唱名：</span>
         <select bind:value={notation.pitch.base}>
-          {#each pitches as v}
-            <option value={v}>{v}</option>
+          {#each pitches as v, i}
+            <option value={v}>{pitchesText[i]}</option>
           {/each}
         </select>
       </label>
@@ -239,8 +240,8 @@ onMount(() => {
           <div>
             <div class="inline-field">
               <select bind:value={pitch.base}>
-                {#each pitches as v}
-                  <option value={v}>{v}</option>
+                {#each pitches as v, i}
+                  <option value={v}>{pitchesText[i]}</option>
                 {/each}
               </select>
             </div>

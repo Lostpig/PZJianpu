@@ -38,13 +38,14 @@ body {
 
 .sheet-container {
   flex: 1;
-  height: 100vh;
+  height: calc(100vh - 45px);
   border-right: 1px solid #111;
   overflow: auto;
   display: flex;
   align-items: center;
   flex-direction: column;
   background-color: #efefef;
+  margin-top: 45px;
 }
 
 #app {

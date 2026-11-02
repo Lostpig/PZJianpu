@@ -320,12 +320,7 @@ interface RowContext {
 const computeNotationTime = (notation: Notation) => {
   let time = 1024 / notation.time
   if (notation.type !== NotationType.Tuplet && notation.dot === true) {
-    if (notation.time === 1 || notation.time == 2) {
-      // 全音符和二分音符不能添加附点
-    }
-    else {
-      time = time * 1.5
-    }
+    time = time * 1.5
   }
 
   return time
@@ -362,14 +357,14 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Readon
 
     notationCount++
     xPositions.push(usedWidth)
-    if (notation.type === NotationType.Note) {  // 音符
+    if (notation.type === NotationType.Note || notation.type === NotationType.Rest) {  // 音符 or 休止符
       const noteWidth = widthComputer.note(ctx, notation)
       if (notation.time === 1) {
-        usedWidth += noteWidth * 4
-        itemsCount += 4
+        usedWidth += noteWidth * (notation.dot ? 6 : 4)
+        itemsCount += notation.dot ? 6 : 4
       } else if (notation.time === 2) {
-        usedWidth += noteWidth * 2
-        itemsCount += 2
+        usedWidth += noteWidth * (notation.dot ? 3 : 2)
+        itemsCount += notation.dot ? 3 : 2
       } else {
         usedWidth += noteWidth
         itemsCount += 1
@@ -378,11 +373,10 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Readon
         }
       }
 
-      if (notation.ornaments.length > 0) usedWidth += widthComputer.ornaments(ctx, notation.ornaments.length)
-    } else if (notation.type === NotationType.Rest) { // 休止符
-      usedWidth += widthComputer.note(ctx, notation)
-      itemsCount += 1
-    } else if (notation.type === NotationType.Tuplet) { // n连音
+      if (notation.type === NotationType.Note && notation.ornaments.length > 0) {
+        usedWidth += widthComputer.ornaments(ctx, notation.ornaments.length)
+      }
+    } else { // n连音
       usedWidth += widthComputer.tuplet(ctx, notation) * notation.pitches.length
       itemsCount += notation.pitches.length
     }
@@ -426,7 +420,9 @@ const computeRowContext = (sheet: RenderSheet, ctx: RenderContext, state: Readon
 }
 
 const renderMode = (ctx: RenderContext, state: RenderState, rowContext: RowContext, mode: Mode) => {
-  const text = '1 = ' + ModeText[mode.value]
+  const t = ModeText[mode.value]
+  const num = parseInt(t[t.length - 1])
+  const text = '1 = ' + t.slice(0, -1) + (num + mode.octave)
 
   const y = rowContext.yMargin === 1 ? state.y - ctx.lineHeight : state.y - ctx.lineHeight * 2
   const item: TextItem = { type: 'text', align: 'left', text, x: state.x, y: y, size: ctx.fontSize * 0.75 }
@@ -757,7 +753,11 @@ const renderSectionLine = (ctx: RenderContext, state: RenderState, rowContext: R
 const renderExtendedLine = (ctx: RenderContext, state: RenderState, rowContext: RowContext, note: Note | Rest) => {
   // 全音符和二分音符延音线
   if (note.time < 4) {
-    const count = note.time === 1 ? 3 : 1
+    let count = note.time === 1 ? 3 : 1
+    if (note.dot) {
+      count = count == 1 ? 2 : 5
+    }
+
     for(let i = 0; i < count; i++) {
       state.x += rowContext.margin / 2
       const line: LineItem = { 
@@ -782,7 +782,7 @@ const renderDotted = (ctx: RenderContext, state: RenderState, item: RenderNotati
       item.renderItems.push(dot)
       state.x += widthComputer.dot(ctx)
     } else {
-      renderLog(state, '无效参数：全音符和二分音符的附点无效', 'warning')
+      // renderLog(state, '无效参数：全音符和二分音符的附点无效', 'warning')
     }
   }
 }

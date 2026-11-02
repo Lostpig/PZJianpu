@@ -7,12 +7,12 @@ interface JianpuEvents {
   'NotationSelected': { notation?: Notation, index: number }
   'NotationUpdated': { notation: Notation, index: number }
   'Rendered': { logs: RenderLog[] }
+  'Locked': { locked: boolean }
 }
 export type JianpuEventName = keyof JianpuEvents
 export type JianpuEvent<T extends JianpuEventName> = JianpuEvents[T]
 export type JianpuEventHandler<T extends JianpuEventName> = (instance: Jianpu, event: JianpuEvent<T>) => void
 
-const selectedColor = '#3471ff'
 const cloneNotation = (notation: Notation): Notation => {
   if (!notation) return notation
 
@@ -54,7 +54,9 @@ export class Jianpu {
   private _context?: CanvasRenderingContext2D
   private _eventHandlers = new Map<JianpuEventName, JianpuEventHandler<any>[]>()
   private _selectedStyle: SheetStyle
+  private _locked = false
   public DEBUG: boolean = false
+  public get locked() { return this._locked }
 
   static DefaultSheet(): Sheet {
     return {
@@ -65,7 +67,7 @@ export class Jianpu {
         copyright: ''
       },
       repeats: [],
-      modes: [{ notation: 0, value: 0 }],
+      modes: [{ notation: 0, value: 0, octave: 0 }],
       beats: [{ notation: 0, numerator: 4, denominator: 4 }],
       bpms: [{ notation: 0, bpm: 72 }],
       notations: [
@@ -89,6 +91,9 @@ export class Jianpu {
         font: 'Arial'
       }
     }
+  }
+  static CloneNotation(notation: Notation): Notation {
+    return cloneNotation(notation)
   }
 
   constructor(sheet?: Sheet, options?: Options) {
@@ -132,7 +137,7 @@ export class Jianpu {
 
     this.render()
   }
-  getOptions() {
+  getOptions(): Options {
     return { ...this._options }
   }
   getNotation(index: number) {
@@ -149,6 +154,7 @@ export class Jianpu {
 
   private initCanvasHandler(canvas: HTMLCanvasElement) {
     canvas.addEventListener('click', (ev) => {
+      if (this._locked) return
       const rect = canvas.getBoundingClientRect()
 
       const x = ev.clientX - rect.left
@@ -180,6 +186,7 @@ export class Jianpu {
     this._selectdIndex = index
     this.paintNotation(last)
     this.paintNotation(index)
+    if (this.locked) return
 
     const notation = this._renderSheet.notations[index]
     const event: JianpuEvent<'NotationSelected'> = {
@@ -188,7 +195,6 @@ export class Jianpu {
     }
     this.dispatch('NotationSelected', event)
   }
-
   binding(canvas: HTMLCanvasElement) {
     // if (this._context) this._context.canvas.removeEventListener('click', ...)
 
@@ -244,7 +250,7 @@ export class Jianpu {
     if (index === this._selectdIndex) {
       this._context.fillStyle = '#e7e7e7'
       this._context.fillRect(notation.x1, notation.y1, notation.x2 - notation.x1, notation.y2 - notation.y1)
-      console.log(`selected notation rect: [${notation.x1}, ${notation.x2}, ${notation.y1}, ${notation.y2}]`)
+      if (this.DEBUG) console.log(`selected notation rect: [${notation.x1}, ${notation.x2}, ${notation.y1}, ${notation.y2}]`)
     }
     for(const item of notation.renderItems) {
       paintItem(this._context, item, style)
@@ -318,12 +324,20 @@ export class Jianpu {
     this.render()
   }
 
-  updateMode(index: number, value: ModeValue) {
+  private findNotationKey(keys: MapIterator<number>, index: number) {
+    let key = 0
+    for(let k of keys) {
+      if (k <= index && k > key) key = k
+    }
+    return key
+  }
+  updateMode(index: number, value: ModeValue, octave: number) {
     if (!this._renderSheet.modes.has(index)) {
       throw new Error(`音符位置${index}的调号不存在`)
     }
 
     this._renderSheet.modes.get(index)!.value = value
+    this._renderSheet.modes.get(index)!.octave = octave
     this.render()
   }
   deleteMode(index: number) {
@@ -333,17 +347,23 @@ export class Jianpu {
 
     if (this._renderSheet.modes.delete(index)) this.render()
   }
-  addMode(index: number, value: ModeValue) {
+  addMode(index: number, value: ModeValue, octave: number) {
     if (this._renderSheet.modes.has(index)) {
       throw new Error('当前音符位置已存在调号信息')
     }
     const mode: Mode = {
       notation: index,
-      value
+      value,
+      octave
     }
     this._renderSheet.modes.set(index, mode)
 
     this.render()
+  }
+  findMode(index: number): Mode {
+    if (this._renderSheet.modes.size <= 1) return this._renderSheet.modes.get(0)!
+    const key = this.findNotationKey(this._renderSheet.modes.keys(), index)
+    return this._renderSheet.modes.get(key)!
   }
 
   updateBeat(index: number, denominator: number, numerator: number) {
@@ -376,6 +396,11 @@ export class Jianpu {
 
     this.render()
   }
+  findBeat(index: number): Beat {
+    if (this._renderSheet.beats.size <= 1) return this._renderSheet.beats.get(0)!
+    const key = this.findNotationKey(this._renderSheet.beats.keys(), index)
+    return this._renderSheet.beats.get(key)!
+  }
 
   updateBpm(index: number, bpm: number) {
     if (!this._renderSheet.bpms.has(index)) {
@@ -404,6 +429,27 @@ export class Jianpu {
     this._renderSheet.bpms.set(index, newBpm)
 
     this.render()
+  }
+  findBpm(index: number): Bpm {
+    if (this._renderSheet.bpms.size <= 1) return this._renderSheet.bpms.get(0)!
+    const key = this.findNotationKey(this._renderSheet.bpms.keys(), index)
+    return this._renderSheet.bpms.get(key)!
+  }
+
+  private _lastSelectedIndex = -1
+  lock(locked: boolean) {
+    this._locked = locked
+    this.dispatch('Locked', { locked })
+
+    if (locked) {
+      this._lastSelectedIndex = this.selectedIndex
+    } else {
+      if (this._lastSelectedIndex === -1) {
+        this.selectNotation(this.selectedIndex, true)
+      } else {
+        this.selectNotation(this._lastSelectedIndex)
+      }
+    }
   }
 }
 export { ModeText, NotationType }

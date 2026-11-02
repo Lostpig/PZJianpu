@@ -1,6 +1,6 @@
 {
   "name": "pzjianpu",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,5 +16,8 @@
     "tslib": "^2.6.3",
     "typescript": "^5.2.2",
     "vite": "^5.3.4"
+  },
+  "dependencies": {
+    "webaudio-instruments": "^0.4.1"
   }
 }

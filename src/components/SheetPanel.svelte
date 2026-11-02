@@ -1,13 +1,15 @@
 <script lang="ts">
   import { getContext, onMount } from 'svelte'
-  import type { Jianpu, Sheet, Mode, Beat, Bpm, Options } from '../jianpu/index'
+  import { Jianpu, type Sheet, type Mode, type Beat, type Bpm } from '../jianpu/index'
   import { ModeText } from '../jianpu/index'
+  import { compressGzip, decompressGzip, SaveToSheet, SheetToSave } from '../jianpu/save-converter'
   const jianpu = getContext<Jianpu>('jianpu')
   const options = jianpu.getOptions()
   let sheet: Sheet = jianpu.getSheet()
 
   let tab = 1
-  let file_importer: HTMLInputElement
+  let json_importer: HTMLInputElement
+  let gzip_importer: HTMLInputElement
 
   const activeTab = (index: number) => {
     tab = index
@@ -17,9 +19,10 @@
     jianpu.updateInfo(sheet.info)
   }
 
+  const octaves = [-3, -2, -1, 0, +1, +2, +3]
   const saveMode = (mode: Mode) => {
     try {
-      jianpu.updateMode(mode.notation, mode.value)
+      jianpu.updateMode(mode.notation, mode.value, mode.octave)
     } catch (err) {
       alert((err as Error).message)
     }
@@ -31,8 +34,8 @@
     }
 
     try {
-      jianpu.addMode(jianpu.selectedIndex, 0)
-      sheet.modes = [...sheet.modes, { notation: jianpu.selectedIndex, value: 0 }]
+      jianpu.addMode(jianpu.selectedIndex, 0, 0)
+      sheet.modes = [...sheet.modes, { notation: jianpu.selectedIndex, value: 0, octave: 0 }]
     } catch (err) {
       alert((err as Error).message)
     }
@@ -104,13 +107,21 @@
     }
   }
 
+  const clearSheet = () => {
+    const sure = confirm("确定要清空当前谱面吗？")
+    if (!sure) return
+
+    const emptySheet = Jianpu.DefaultSheet()
+    jianpu.setSheet(emptySheet)
+    sheet = jianpu.getSheet()
+  }
   const exportJson = () => {
     const exportSheet = jianpu.getSheet()
-    const json = JSON.stringify(exportSheet)
+    const json = SheetToSave(exportSheet)
 
     const data = new Blob([json], { type: 'application/json' })
     const downloadLink = document.createElement('a')
-    downloadLink.download = 'sheet.json'
+    downloadLink.download = `${exportSheet.info.title}.json`
     downloadLink.href = URL.createObjectURL(data)
     downloadLink.click()
     URL.revokeObjectURL(downloadLink.href)
@@ -121,9 +132,10 @@
       
       reader.addEventListener('loadend', () => {
         try {
-          const json = JSON.parse(reader.result as string)
-          jianpu.setSheet(json)
-          sheet = jianpu.getSheet()
+          const importSheet = SaveToSheet(reader.result as string)
+
+          jianpu.setSheet(importSheet)
+          sheet = importSheet
         } catch (err) {
           alert((err as Error).message || 'import failed!')
         }
@@ -133,6 +145,31 @@
       })
 
       reader.readAsText(file, "utf8")
+    }
+  }
+
+  const exportGzip = async () => {
+    const exportSheet = jianpu.getSheet()
+    const json = SheetToSave(exportSheet)
+    const blob = await compressGzip(json)
+
+    const downloadLink = document.createElement('a')
+    downloadLink.download = `${exportSheet.info.title}.pzjp`
+    downloadLink.href = URL.createObjectURL(blob)
+    downloadLink.click()
+    URL.revokeObjectURL(downloadLink.href)
+  }
+  const importGzip = async (file?: File) => {
+    if (file) {
+      const json = await decompressGzip(file)
+      try {
+        const importSheet = SaveToSheet(json)
+
+        jianpu.setSheet(importSheet)
+        sheet = importSheet
+      } catch (err) {
+        alert((err as Error).message || 'import failed!')
+      }
     }
   }
 
@@ -193,12 +230,8 @@
       <span>左右间距：</span>
       <input type="number" bind:value={options.paddingY}>
     </label>
-    <hr>
     <div class="footer">
-      <input type="file" accept=".json" bind:this={file_importer} on:change={(ev) => importJson(ev.currentTarget.files?.[0])} style="display: none;">
-      <button type="button" on:click={() => file_importer.click()}>导入</button>
-      <button type="button" on:click={() => exportJson()}>导出</button>
-      <div class="space"></div>
+      <button class="red" type="button" on:click={() => clearSheet()}>清空</button>
       <button type="button" on:click={() => saveInfo()}>应用</button>
     </div>
   </div>
@@ -218,10 +251,15 @@
               <input type="number" readonly value={mode.notation}>
             </div>
             <div class="inline-field">
-              <span>1 = </span>
-              <select bind:value={mode.value}>
+              <select style="width: 4rem;" bind:value={mode.value}>
                 {#each ModeText as text, index}
                   <option value="{index}">{text}</option>
+                {/each}
+              </select>
+              <span>+</span>
+              <select bind:value={mode.octave}>
+                {#each octaves as v}
+                  <option value={v}>{v}</option>
                 {/each}
               </select>
             </div>
@@ -286,6 +324,14 @@
     </div>
   </div>
   {/if}
+  <div class="data-manager">
+    <input type="file" accept=".json" bind:this={json_importer} on:change={(ev) => importJson(ev.currentTarget.files?.[0])} style="display: none;">
+    <input type="file" accept=".pzjp" bind:this={gzip_importer} on:change={(ev) => importGzip(ev.currentTarget.files?.[0])} style="display: none;">
+    <button type="button" on:click={() => json_importer.click()}>导入Json</button>
+    <button type="button" on:click={() => exportJson()}>导出Json</button>
+    <button type="button" class="orange" on:click={() => gzip_importer.click()}>导入Gzip</button>
+    <button type="button" class="orange" on:click={() => exportGzip()}>导出Gzip</button>
+  </div>
 </div>
 
 <style>
@@ -336,14 +382,10 @@
 .footer {
   display: flex;
   margin-top: 0.5rem;
-  border-top: var(--custom-border);
   padding-top: 1rem;
 }
 .footer button {
   margin-right: 0.5rem;
-}
-.space {
-  flex: 1;
 }
 
 .settings > div {
@@ -384,5 +426,10 @@
   flex: 1;
   display: inline-block;
   text-align: right;
+}
+
+.data-manager {
+  padding-top: 0.5rem;
+  border-top: var(--custom-border);
 }
 </style>

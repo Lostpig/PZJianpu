@@ -1,8 +1,12 @@
 <script lang="ts">
 import { getContext, onMount } from 'svelte'
-import type { Jianpu, Notation, JianpuEvent } from '../jianpu/index'
+import { Jianpu, type Notation, type JianpuEvent } from '../jianpu/index'
 import { NotationType } from '../jianpu/index'
+import type { SheetOperation } from '../jianpu/operation'
+import type { MidiPlayer } from '../midi/midi';
 const jianpu = getContext<Jianpu>('jianpu')
+const midi = getContext<MidiPlayer | undefined>('midi')
+const operation = getContext<SheetOperation>('operation')
 
 let index = -1
 let notation: Notation | undefined = undefined
@@ -32,6 +36,15 @@ const addNotation = () => {
 }
 const removeNotation = () => {
   jianpu.deleteNotation(index)
+}
+const copyNotation = () => {
+  operation.copyNotation(notation)
+}
+const addPasteNoration = () => {
+  operation.pasteAdd()
+}
+const pasteNoration = () => {
+  operation.pasteOverride(index)
 }
 
 const tupletCountChange = (value: number) => {
@@ -96,6 +109,15 @@ const removeOrnament = () => {
   if (notation.type !== NotationType.Note) return
 
   if (notation.ornaments.length > 0) notation.ornaments = notation.ornaments.slice(0, -1)
+}
+const testNote = () => {
+  if (notation?.type == NotationType.Note) {
+    const mode = jianpu.findMode(index)
+    const bpm = jianpu.findBpm(index)
+    const beat = jianpu.findBeat(index)
+
+    midi?.TestPlay(notation, mode, beat, bpm)
+  }
 }
 
 const octaves = [-3, -2, -1, 0, +1, +2, +3]
@@ -265,14 +287,18 @@ onMount(() => {
     {/if}
   </div>
   <div class="footer">
-    <button type="button" class="gray" on:click={() => addNotation()}>插入音符</button>
-    <button type="button" class="red" on:click={() => removeNotation()}>删除音符</button>
+    <button type="button" class="gray" on:click={() => addNotation()}>插入</button>
+    <button type="button" class="red" on:click={() => removeNotation()}>删除</button>
+    <button type="button" class="orange" on:click={() => copyNotation()}>复制</button>
+    <button type="button" class="orange" on:click={() => pasteNoration()}>粘贴</button>
     <div class="space"></div>
+    <button type="button" class="orange" on:click={() => testNote()}>试音</button>
     <button type="button" on:click={() => saveNotation()}>应用</button>
   </div>
   {:else}
     <p>未选中音符</p>
     <button type="button" class="gray" on:click={() => addNotation()}>插入新音符</button>
+    <button type="button" class="gray" on:click={() => addPasteNoration()}>粘贴新音符</button>
   {/if}
 </div>
 

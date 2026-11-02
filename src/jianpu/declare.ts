@@ -26,8 +26,8 @@ export interface Repeat {
 // 拍号
 export interface Beat {
   notation: number    // 生效起始音符  拍号的生效起始音符必须为小节起始音符
-  numerator: number   // 分子
-  denominator: number // 分母
+  numerator: number   // 分子（每小节拍数）
+  denominator: number // 分母（每拍基本单位）
 }
 
 // 速度
@@ -38,10 +38,11 @@ export interface Bpm {
 // 调号
 //                      A  #A   B   C  #C   D  #D   E   F  #F   G    #G
 export type ModeValue = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11
-export const ModeText = ['A', '♭B', 'B', 'C', '♯C', 'D', '♯D', 'E', 'F', '♯F', 'G', '♯G']
+export const ModeText = ['A3', '♭B3', 'B3', 'C4', '♯C4', 'D4', '♯D4', 'E4', 'F4', '♯F4', 'G4', '♯G4']
 export interface Mode {
   notation: number     // 生效起始音符
   value: ModeValue
+  octave: number       // 八度 0原调 正整数:升n个八度 负整数:降n个八度
 }
 
 export const NotationType = <const>{
@@ -52,7 +53,7 @@ export const NotationType = <const>{
 
 export interface Pitch {
   base: 1|2|3|4|5|6|7 // 1234567
-  accidental: number  // 升降调 0原调 1升调 2重生 -1降调 -2重降
+  accidental: number  // 升降调 0原调 1升调 2重升 -1降调 -2重降
   octave: number      // 八度 0原调 正整数:升n个八度 负整数:降n个八度
 }
 export interface Note {

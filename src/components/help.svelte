@@ -63,6 +63,15 @@ const closeDialog = () => {
         <div class="bordered">Del</div>
         <div class="description">删除当前音符</div>
       </div>
+      <div class="row">
+        <div class="bordered">c</div>
+        <div class="description">复制保存当前音符</div>
+      </div>
+      <div class="row">
+        <div class="bordered">x</div>
+        <div class="bordered">v</div>
+        <div class="description">插入/覆盖当前保存的音符</div>
+      </div>
       <hr>
       <div>其他</div>
       <div class="row">

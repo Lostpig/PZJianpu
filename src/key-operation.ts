@@ -1,7 +1,16 @@
 import { Jianpu, NotationType, type Note } from "./jianpu/index";
+import type { SheetOperation } from './jianpu/operation'
 
-export const bindingKeyboardHandlers = (jianpu: Jianpu) => {
+export const bindingKeyboardHandlers = (op: SheetOperation) => {
+  let sheetLocked = op.jianpu.locked
+  op.jianpu.listen('Locked', (j, e) => {
+    sheetLocked = e.locked
+  })
+
   document.addEventListener('keyup', (ev) => {
+    if (sheetLocked) return
+
+    ev.preventDefault()
     if (ev.target) {
       const tag = (ev.target as HTMLElement).tagName?.toUpperCase()
       if (tag === 'INPUT' || tag === 'SELECT') return
@@ -9,7 +18,7 @@ export const bindingKeyboardHandlers = (jianpu: Jianpu) => {
 
     const key = ev.key
     if (keyCodeHandlers[key]) {
-      keyCodeHandlers[key](jianpu)
+      keyCodeHandlers[key](op)
     }
   })
 }
@@ -23,36 +32,40 @@ export const bindingKeyboardHandlers = (jianpu: Jianpu) => {
  * 点.键  添加/去除附点
  * []\    圆滑线 起始 结束 无
  */
-const keyCodeHandlers: { [key: string]: (jianpu: Jianpu) => void } = {
-  ['1']: (jianpu: Jianpu) => setNotation(jianpu, 1),
-  ['2']: (jianpu: Jianpu) => setNotation(jianpu, 2),
-  ['3']: (jianpu: Jianpu) => setNotation(jianpu, 3),
-  ['4']: (jianpu: Jianpu) => setNotation(jianpu, 4),
-  ['5']: (jianpu: Jianpu) => setNotation(jianpu, 5),
-  ['6']: (jianpu: Jianpu) => setNotation(jianpu, 6),
-  ['7']: (jianpu: Jianpu) => setNotation(jianpu, 7),
-  ['0']: (jianpu: Jianpu) => setNotation(jianpu, 0),
+const keyCodeHandlers: { [key: string]: (op: SheetOperation) => void } = {
+  ['1']: (op: SheetOperation) => setNotation(op.jianpu, 1),
+  ['2']: (op: SheetOperation) => setNotation(op.jianpu, 2),
+  ['3']: (op: SheetOperation) => setNotation(op.jianpu, 3),
+  ['4']: (op: SheetOperation) => setNotation(op.jianpu, 4),
+  ['5']: (op: SheetOperation) => setNotation(op.jianpu, 5),
+  ['6']: (op: SheetOperation) => setNotation(op.jianpu, 6),
+  ['7']: (op: SheetOperation) => setNotation(op.jianpu, 7),
+  ['0']: (op: SheetOperation) => setNotation(op.jianpu, 0),
 
-  ['ArrowLeft']: (jianpu: Jianpu) => moveSelected(jianpu, -1),
-  ['ArrowRight']: (jianpu: Jianpu) => moveSelected(jianpu, 1),
+  ['ArrowLeft']: (op: SheetOperation) => moveSelected(op.jianpu, -1),
+  ['ArrowRight']: (op: SheetOperation) => moveSelected(op.jianpu, 1),
 
-  ['ArrowUp']: (jianpu: Jianpu) => changeoctave(jianpu, 1),
-  ['ArrowDown']: (jianpu: Jianpu) => changeoctave(jianpu, -1),
+  ['ArrowUp']: (op: SheetOperation) => changeoctave(op.jianpu, 1),
+  ['ArrowDown']: (op: SheetOperation) => changeoctave(op.jianpu, -1),
 
-  ['+']: (jianpu: Jianpu) => changeTime(jianpu, 1),
-  ['-']: (jianpu: Jianpu) => changeTime(jianpu, -1),
+  ['+']: (op: SheetOperation) => changeTime(op.jianpu, 1),
+  ['-']: (op: SheetOperation) => changeTime(op.jianpu, -1),
 
-  ['/']: (jianpu: Jianpu) => changeAccidental(jianpu, -1),
-  ['*']: (jianpu: Jianpu) => changeAccidental(jianpu, 1),
+  ['/']: (op: SheetOperation) => changeAccidental(op.jianpu, -1),
+  ['*']: (op: SheetOperation) => changeAccidental(op.jianpu, 1),
 
-  ['.']: (jianpu: Jianpu) => toggleDot(jianpu),
+  ['.']: (op: SheetOperation) => toggleDot(op.jianpu),
 
-  ['Delete']: (jianpu: Jianpu) => deleteNotation(jianpu),
-  ['Insert']: (jianpu: Jianpu) => insertNotation(jianpu),
+  ['Delete']: (op: SheetOperation) => deleteNotation(op.jianpu),
+  ['Insert']: (op: SheetOperation) => insertNotation(op.jianpu),
 
-  ['[']: (jianpu: Jianpu) => setSlur(jianpu, 1),
-  [']']: (jianpu: Jianpu) => setSlur(jianpu, 2),
-  ['\\']: (jianpu: Jianpu) => setSlur(jianpu, 0)
+  ['[']: (op: SheetOperation) => setSlur(op.jianpu, 1),
+  [']']: (op: SheetOperation) => setSlur(op.jianpu, 2),
+  ['\\']: (op: SheetOperation) => setSlur(op.jianpu, 0),
+
+  ['c']: (op: SheetOperation) => copy(op),
+  ['v']: (op: SheetOperation) => pasteOverride(op),
+  ['x']: (op: SheetOperation) => pasteAdd(op),
 }
 
 const defaultNote: Note = {
@@ -141,7 +154,7 @@ const toggleDot = (jianpu: Jianpu) => {
   const notation = jianpu.getNotation(jianpu.selectedIndex)
   if (!notation) return
 
-  if (notation.type !== NotationType.Note) return
+  if (notation.type === NotationType.Tuplet) return
   notation.dot = !notation.dot
 
   jianpu.updateNotation(notation, jianpu.selectedIndex)
@@ -169,4 +182,15 @@ const setSlur = (jianpu: Jianpu, param: 0 | 1 | 2) => {
   notation.slur = param
 
   jianpu.updateNotation(notation, jianpu.selectedIndex)
+}
+
+const copy = (op: SheetOperation) => {
+  const nt = op.jianpu.getNotation(op.jianpu.selectedIndex)
+  op.copyNotation(nt)
+}
+const pasteOverride = (op: SheetOperation) => {
+  op.pasteOverride(op.jianpu.selectedIndex)
+}
+const pasteAdd = (op: SheetOperation) => {
+  op.pasteAdd()
 }
